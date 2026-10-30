@@ -41,6 +41,9 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [pageSettingsOpen,setPageSettingsOpen]=useState(false);
+  const [pageSettingsSaving,setPageSettingsSaving]=useState(false);
+  const [pageSettingsForm]=Form.useForm<{title:string;slug:string;isHome:boolean}>();
   const [blockType, setBlockType] = useState<Block["type"]>("rich_text");
   const [previewMode, setPreviewMode] = useState<"desktop"|"tablet"|"mobile">("desktop");
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
@@ -135,6 +138,19 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
       message.error(response?.data?.error?.message ?? "Halaman gagal dibuat.");
     } finally { setCreating(false); }
   }
+  async function updatePageSettings(values:{title:string;slug:string;isHome:boolean}) {
+    if(!schoolId || !selectedPageId) return;
+    setPageSettingsSaving(true);
+    try {
+      await api.patch(`/api/v1/cms/pages/${selectedPageId}`,values,headers);
+      message.success("Pengaturan halaman diperbarui.");
+      setPageSettingsOpen(false);
+      await loadSite();
+    } catch(error:unknown) {
+      const response=(error as {response?:{data?:{error?:{message?:string}}}}).response;
+      message.error(response?.data?.error?.message ?? "Pengaturan halaman gagal diperbarui.");
+    } finally { setPageSettingsSaving(false); }
+  }
   async function savePage() {
     if(!schoolId || !selectedPageId) return;
     setSaving(true);
@@ -213,7 +229,7 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
           {!selected?<Empty description="Pilih atau buat halaman untuk mulai mengedit"/>:<>
             <Space wrap style={{width:"100%",justifyContent:"space-between"}}>
               <div><Title level={4} style={{margin:0}}>{selected.title}</Title><Text type="secondary">/{selected.slug} · {selected.isPublished?"Sudah dipublikasikan":"Belum dipublikasikan"}</Text></div>
-              <Space wrap><Button icon={<SaveOutlined/>} loading={saving} onClick={()=>void savePage()}>Simpan Draft</Button><Button type="primary" icon={<SendOutlined/>} onClick={()=>void publish()}>Publikasikan</Button></Space>
+              <Space wrap><Button onClick={()=>{pageSettingsForm.setFieldsValue({title:selected.title,slug:selected.slug,isHome:selected.isHome});setPageSettingsOpen(true);}}>Pengaturan Halaman</Button>{selected.isPublished&&<Button href={`/site/${schoolUnits.find(u=>u.id===schoolId)?.code}/${selected.slug}`} target="_blank">Lihat Website</Button>}<Button icon={<SaveOutlined/>} loading={saving} onClick={()=>void savePage()}>Simpan Draft</Button><Button type="primary" icon={<SendOutlined/>} onClick={()=>void publish()}>Publikasikan</Button></Space>
             </Space>
             <Divider/>
             <Space wrap><Text strong>Susunan konten</Text><Select value={blockType} onChange={setBlockType} style={{width:170}} options={Object.entries(blockLabels).map(([value,label])=>({value,label}))}/><Button icon={<PlusOutlined/>} onClick={()=>setBlocks(current=>[...current,newBlock(blockType)])}>Tambah Blok</Button><Button icon={<EyeOutlined/>} onClick={()=>setPreviewMode(m=>m==="desktop"?"tablet":m==="tablet"?"mobile":"desktop")}>Preview: {previewMode}</Button></Space>
@@ -267,6 +283,13 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
       </div>)}
       <Text type="secondary" style={{display:"block",marginTop:12,fontSize:12}}>Verifikasi DNS belum otomatis memasang SSL. Pengaturan DNS tujuan dan sertifikat HTTPS perlu diselesaikan pada infrastruktur hosting.</Text>
     </Card>
+    <Modal title="Pengaturan Halaman" open={pageSettingsOpen} onCancel={()=>setPageSettingsOpen(false)} onOk={()=>pageSettingsForm.submit()} confirmLoading={pageSettingsSaving} okText="Simpan Pengaturan" cancelText="Batal" destroyOnHidden>
+      <Form form={pageSettingsForm} layout="vertical" onFinish={updatePageSettings}>
+        <Form.Item name="title" label="Nama Halaman" rules={[{required:true,min:2}]}><Input/></Form.Item>
+        <Form.Item name="slug" label="Slug URL" rules={[{required:true,pattern:/^[a-z0-9]+(?:-[a-z0-9]+)*$/}]}><Input/></Form.Item>
+        <Form.Item name="isHome" label="Halaman Utama"><Select options={[{value:true,label:"Ya, jadikan halaman utama"},{value:false,label:"Tidak"}]}/></Form.Item>
+      </Form>
+    </Modal>
     <Modal title="Buat Halaman Website" open={createOpen} onCancel={()=>setCreateOpen(false)} onOk={()=>createForm.submit()} confirmLoading={creating} okText="Buat Halaman" cancelText="Batal" destroyOnHidden>
       <Form form={createForm} layout="vertical" onFinish={createPage} initialValues={{isHome:false}}>
         <Form.Item name="title" label="Nama Halaman" rules={[{required:true,min:2}]}><Input placeholder="Contoh: Profil Sekolah"/></Form.Item>

@@ -17,3 +17,9 @@ export const cmsPageDocumentSchema = z.object({ schemaVersion: z.literal("1.0"),
 export const cmsCreatePageSchema = z.object({ title: z.string().trim().min(2).max(180), slug: cmsSlugSchema, isHome: z.boolean().default(false) });
 export const cmsSavePageSchema = z.object({ document: cmsPageDocumentSchema });
 
+
+export const cmsUpdatePageSchema = z.object({
+  title: z.string().trim().min(2).max(180).optional(),
+  slug: cmsSlugSchema.optional(),
+  isHome: z.boolean().optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one page field is required");

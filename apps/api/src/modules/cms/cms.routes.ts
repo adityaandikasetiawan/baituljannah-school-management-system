@@ -9,7 +9,7 @@ import { auditLogs, schoolSites, schoolUnits, sitePages, sitePageVersions, siteP
 import { authenticate } from "../../middleware/authenticate.js";
 import { loadAccessContext } from "../access/access-context.js";
 import { requirePermission } from "../../middleware/require-permission.js";
-import { cmsSlugSchema, cmsCreatePageSchema, cmsSavePageSchema } from "./cms.schemas.js";
+import { cmsSlugSchema, cmsCreatePageSchema, cmsSavePageSchema, cmsUpdatePageSchema } from "./cms.schemas.js";
 
 export const cmsRouter = Router();
 function selectedSchool(req: Request, res: Response): string | null {
@@ -158,6 +158,30 @@ cmsRouter.post("/pages", authenticate, loadAccessContext, requirePermission("web
       return { page, version };
     });
     res.status(201).json({ data: created });
+  } catch (error) { next(error); }
+});
+cmsRouter.patch("/pages/:pageId", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {
+  const schoolId = selectedSchool(req, res);
+  if (!schoolId) return;
+  const pageId = z.uuid().safeParse(req.params.pageId);
+  const parsed = cmsUpdatePageSchema.safeParse(req.body);
+  if (!pageId.success || !parsed.success) { res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Data halaman tidak valid.", details: parsed.success ? undefined : parsed.error.flatten() } }); return; }
+  try {
+    const site = await findSite(schoolId);
+    if (!site) { res.status(404).json({ error: { code: "SITE_NOT_FOUND", message: "Website tidak ditemukan." } }); return; }
+    const page = await db.query.sitePages.findFirst({ where: and(eq(sitePages.id, pageId.data), eq(sitePages.siteId, site.id)) });
+    if (!page) { res.status(404).json({ error: { code: "PAGE_NOT_FOUND", message: "Halaman tidak ditemukan." } }); return; }
+    if (parsed.data.slug && parsed.data.slug !== page.slug) {
+      const duplicate = await db.query.sitePages.findFirst({ where: and(eq(sitePages.siteId, site.id), eq(sitePages.slug, parsed.data.slug)) });
+      if (duplicate) { res.status(409).json({ error: { code: "SLUG_ALREADY_EXISTS", message: "Slug halaman sudah digunakan." } }); return; }
+    }
+    const updated = await db.transaction(async (tx) => {
+      if (parsed.data.isHome) await tx.update(sitePages).set({ isHome: false }).where(eq(sitePages.siteId, site.id));
+      const [row] = await tx.update(sitePages).set({ ...parsed.data, updatedAt: new Date() }).where(eq(sitePages.id, page.id)).returning();
+      await tx.insert(auditLogs).values({ actorUserId: req.auth!.sub, schoolId, action: "cms.page_settings_updated", entityType: "site_page", entityId: page.id, metadata: parsed.data });
+      return row;
+    });
+    res.json({ data: updated });
   } catch (error) { next(error); }
 });
 cmsRouter.get("/pages/:pageId", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {

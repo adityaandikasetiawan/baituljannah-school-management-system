@@ -10,6 +10,7 @@ All authoring requests require a bearer token, `x-school-id`, and server-side `w
 - `GET /api/v1/cms/site` — current school website and page list.
 - `POST /api/v1/cms/pages` — create a page with an initial immutable content version.
 - `GET /api/v1/cms/pages/:pageId` — read page and its version history.
+- `PATCH /api/v1/cms/pages/:pageId` — update page title, slug, and homepage designation.
 - `PUT /api/v1/cms/pages/:pageId` — save a new immutable page version.
 - `POST /api/v1/cms/pages/:pageId/publish` — publish the latest saved version.
 - `POST /api/v1/cms/pages/:pageId/rollback/:versionId` — publish a previous immutable version.
