@@ -8,6 +8,7 @@ export const enrollmentStatus = pgEnum("enrollment_status", ["candidate", "activ
 export const academicYearStatus = pgEnum("academic_year_status", ["draft", "active", "closed"]);
 export const attendanceSessionStatus = pgEnum("attendance_session_status", ["draft", "submitted", "locked"]);
 export const attendanceRecordStatus = pgEnum("attendance_record_status", ["unmarked", "present", "absent", "late", "sick", "permission"]);
+export const teacherEmploymentStatus = pgEnum("teacher_employment_status", ["active", "leave", "inactive"]);
 
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -276,3 +277,16 @@ export const attendanceRecords = pgTable("attendance_records", {
   markedBy: uuid("marked_by").references(() => users.id),
   markedAt: timestamp("marked_at", { withTimezone: true }),
 }, (t) => [uniqueIndex("attendance_record_session_student_uq").on(t.sessionId, t.studentId), index("attendance_record_student_idx").on(t.studentId)]);
+
+export const teacherProfiles = pgTable("teacher_profiles", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  schoolId: uuid("school_id").notNull().references(() => schoolUnits.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  employeeNumber: varchar("employee_number", { length: 40 }).notNull(),
+  jobTitle: varchar("job_title", { length: 100 }).default("Guru").notNull(),
+  specialization: varchar("specialization", { length: 180 }),
+  hireDate: date("hire_date", { mode: "string" }),
+  employmentStatus: teacherEmploymentStatus("employment_status").default("active").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [uniqueIndex("teacher_profile_school_user_uq").on(t.schoolId, t.userId), uniqueIndex("teacher_profile_school_employee_uq").on(t.schoolId, t.employeeNumber)]);
