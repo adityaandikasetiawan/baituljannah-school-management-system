@@ -29,6 +29,7 @@ export default function App() {
   const [units, setUnits] = useState<SchoolUnit[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingUnit, setEditingUnit] = useState<SchoolUnit | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [loginForm] = Form.useForm<LoginInput>();
@@ -94,9 +95,15 @@ export default function App() {
   async function createSchoolUnit(values: CreateSchoolUnitInput) {
     setCreateLoading(true);
     try {
-      await api.post("/api/v1/school-units", values);
-      message.success("School unit dan website draft berhasil dibuat.");
+      if (editingUnit) {
+        await api.patch(`/api/v1/school-units/${editingUnit.id}`, values);
+        message.success("School unit berhasil diperbarui.");
+      } else {
+        await api.post("/api/v1/school-units", values);
+        message.success("School unit dan website draft berhasil dibuat.");
+      }
       setCreateOpen(false);
+      setEditingUnit(null);
       unitForm.resetFields();
       await loadUnits();
     } catch (error: unknown) {
@@ -110,6 +117,14 @@ export default function App() {
     { title: "Nama School Unit", dataIndex: "name", key: "name" },
     { title: "Jenjang", dataIndex: "level", key: "level", width: 120 },
     { title: "Status", dataIndex: "status", key: "status", width: 130, render: (value: SchoolUnit["status"]) => <Tag color={value === "active" ? "green" : value === "inactive" ? "default" : "red"}>{value.toUpperCase()}</Tag> },
+    { title: "Aksi", key: "action", width: 190, render: (_value, row) => <Space>
+      <Button size="small" icon={<EditOutlined/>} disabled={row.status === "archived"} onClick={() => { setEditingUnit(row); unitForm.setFieldsValue({ code: row.code, name: row.name, level: row.level as CreateSchoolUnitInput["level"] }); setCreateOpen(true); }}>Ubah</Button>
+      <Button size="small" disabled={row.status === "archived"} onClick={async () => {
+        const status = row.status === "active" ? "inactive" : "active";
+        try { await api.patch(`/api/v1/school-units/${row.id}/status`, { status }); message.success("Status school unit diperbarui."); await loadUnits(); }
+        catch { message.error("Status school unit gagal diperbarui."); }
+      }}>{row.status === "active" ? "Nonaktifkan" : "Aktifkan"}</Button>
+    </Space> },
   ];
 
   if (checkingSession) return <div className="loading-screen"><Spin size="large" tip="Memeriksa sesi..." /></div>;
@@ -166,7 +181,7 @@ export default function App() {
           </Card>
         </> : activeMenu === "units" ? <div className="page-heading">
           <div><Text type="secondary">BAITULJANNAH / FOUNDATION</Text><Title level={2}>School Units</Title><Text type="secondary">Kelola unit sekolah yang berada di bawah Yayasan Baituljannah.</Text></div>
-          <Button type="primary" icon={<PlusOutlined/>} onClick={() => setCreateOpen(true)}>Tambah School Unit</Button>
+          <Button type="primary" icon={<PlusOutlined/>} onClick={() => { setEditingUnit(null); unitForm.resetFields(); setCreateOpen(true); }}>Tambah School Unit</Button>
         </div> : null}
         {activeMenu === "users" && <div className="page-heading">
           <div><Text type="secondary">BAITULJANNAH / FOUNDATION</Text><Title level={2}>Pengguna & Akses</Title><Text type="secondary">Kelola akun dan penempatan peran pengguna pada setiap unit sekolah.</Text></div>
@@ -178,7 +193,7 @@ export default function App() {
       </Content>
       <Footer className="app-footer">Baituljannah SMIS · v{APP_VERSION} · API v1</Footer>
     </Layout>
-    <Modal title="Tambah School Unit" open={createOpen} onCancel={() => setCreateOpen(false)} onOk={() => unitForm.submit()} confirmLoading={createLoading} okText="Buat School Unit" cancelText="Batal" destroyOnHidden>
+    <Modal title={editingUnit ? "Ubah School Unit" : "Tambah School Unit"} open={createOpen} onCancel={() => { setCreateOpen(false); setEditingUnit(null); unitForm.resetFields(); }} onOk={() => unitForm.submit()} confirmLoading={createLoading} okText="Buat School Unit" cancelText="Batal" destroyOnHidden>
       <Form form={unitForm} layout="vertical" onFinish={createSchoolUnit} requiredMark={false}>
         <Form.Item name="code" label="Kode Unit" rules={[{ required: true, min: 2, max: 32, pattern: /^[A-Z0-9_-]+$/, message: "Gunakan huruf kapital, angka, tanda - atau _." }]}>
           <Input placeholder="Contoh: IT-SD" maxLength={32}/>

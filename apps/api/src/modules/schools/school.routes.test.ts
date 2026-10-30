@@ -8,3 +8,13 @@ describe("school-unit input contract", () => {
   it("rejects malformed unit codes", () => expect(schema.safeParse({ code:"it sd", name:"Baituljannah SD", level:"SD" }).success).toBe(false));
   it("rejects unsupported school levels", () => expect(schema.safeParse({ code:"IT-XYZ", name:"Unit", level:"UNIVERSITY" }).success).toBe(false));
 });
+
+describe("school-unit update contract", () => {
+  const updateSchema = z.object({
+    code: z.string().trim().min(2).max(32).regex(/^[A-Z0-9_-]+$/).optional(),
+    name: z.string().trim().min(2).max(180).optional(),
+    level: z.enum(["TK","SD","SMP","SMA","SLB"]).optional(),
+  }).refine((value) => Object.keys(value).length > 0);
+  it("accepts partial school-unit updates", () => expect(updateSchema.safeParse({ name: "Baituljannah SD Baru" }).success).toBe(true));
+  it("rejects an empty update", () => expect(updateSchema.safeParse({}).success).toBe(false));
+});
