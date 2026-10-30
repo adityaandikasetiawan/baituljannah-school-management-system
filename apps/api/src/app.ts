@@ -11,6 +11,7 @@ import { studentsRouter } from "./modules/students/students.routes.js";
 import { academicRouter } from "./modules/academic/academic.routes.js";
 import { attendanceRouter } from "./modules/attendance/attendance.routes.js";
 import { teachersRouter } from "./modules/teachers/teachers.routes.js";
+import { financeRouter } from "./modules/finance/finance.routes.js";
 import { metaRouter } from "./modules/meta/meta.routes.js";
 export function createApp() {
   const app = express();
@@ -28,6 +29,7 @@ export function createApp() {
   app.use("/api/v1/academic", academicRouter);
   app.use("/api/v1/attendance", attendanceRouter);
   app.use("/api/v1/teachers", teachersRouter);
+  app.use("/api/v1/finance", financeRouter);
   app.use("/api/v1/public", publicCmsRouter);
   app.use((_req, res) => res.status(404).json({ error: { code: "NOT_FOUND", message: "Route not found" } }));
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => { console.error(error); res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred" } }); });
