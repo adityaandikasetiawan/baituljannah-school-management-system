@@ -36,7 +36,7 @@ cmsRouter.get("/domains", authenticate, loadAccessContext, requirePermission("we
 cmsRouter.post("/domains", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {
   const schoolId = selectedSchool(req, res);
   if (!schoolId) return;
-  const parsed = z.object({ hostname: z.string().trim().toLowerCase().max(253).regex(/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/, "Masukkan hostname domain yang valid tanpa protokol atau path.") }).safeParse(req.body);
+  const parsed = z.object({ hostname: z.string().trim().toLowerCase().max(253).regex(/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/, "Masukkan hostname domain yang valid tanpa protokol atau path.") }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Hostname domain tidak valid.", details: parsed.error.flatten() } }); return; }
   try {
     const site = await findSite(schoolId);
