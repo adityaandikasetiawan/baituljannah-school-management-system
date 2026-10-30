@@ -25,8 +25,11 @@ Node.js 22+, pnpm 10+, PostgreSQL 15+.
 2. Create PostgreSQL database `baituljannah`.
 3. Run `pnpm install`.
 4. Run `pnpm db:generate && pnpm db:migrate`.
-5. Run `pnpm db:seed` to create role and permission catalog entries.
-6. Run `pnpm dev`. API: `http://localhost:4000/health`; web: `http://localhost:5173`.
+5. Run `pnpm db:seed` to create the organization, role, and permission catalog.
+6. Set `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_NAME`, and a strong `BOOTSTRAP_ADMIN_PASSWORD` in `apps/api/.env` (14+ characters).
+7. Run `pnpm --filter @baituljannah/api admin:bootstrap` once to create the first Super Admin. The command refuses to run if a Super Admin already exists.
+8. Remove the bootstrap password from the environment after the command completes.
+9. Run `pnpm dev`. API: `http://localhost:4000/health`; web: `http://localhost:5173`.
 
 The seed does not create a default administrator or predictable password. A controlled one-time administrator bootstrap is required before real use.
 
