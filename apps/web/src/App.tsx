@@ -164,10 +164,10 @@ export default function App() {
             <Title level={4}>Selamat datang, {user.fullName}</Title>
             <Text type="secondary">Foundation Baituljannah sudah memiliki autentikasi, kontrol akses, dan manajemen awal school unit. Pilih menu School Units untuk mulai menambahkan unit sekolah.</Text>
           </Card>
-        </> : <div className="page-heading">
+        </> : activeMenu === "units" ? <div className="page-heading">
           <div><Text type="secondary">BAITULJANNAH / FOUNDATION</Text><Title level={2}>School Units</Title><Text type="secondary">Kelola unit sekolah yang berada di bawah Yayasan Baituljannah.</Text></div>
           <Button type="primary" icon={<PlusOutlined/>} onClick={() => setCreateOpen(true)}>Tambah School Unit</Button>
-        </div>}
+        </div> : null}
         {activeMenu === "users" && <div className="page-heading">
           <div><Text type="secondary">BAITULJANNAH / FOUNDATION</Text><Title level={2}>Pengguna & Akses</Title><Text type="secondary">Kelola akun dan penempatan peran pengguna pada setiap unit sekolah.</Text></div>
         </div>}
