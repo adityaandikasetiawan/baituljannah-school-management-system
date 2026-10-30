@@ -3,7 +3,7 @@ import type { Request, Response as ExpressResponse } from "express";
 import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
-import { academicYears, auditLogs, classGroups, classSubjects, subjects, userSchoolRoles } from "../../db/schema/index.js";
+import { academicYears, auditLogs, classGroups, classSubjects, roles, subjects, userSchoolRoles, users } from "../../db/schema/index.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { loadAccessContext } from "../access/access-context.js";
 import { requirePermission } from "../../middleware/require-permission.js";
@@ -14,6 +14,12 @@ function selectedSchool(req:Request,res:ExpressResponse):string|null {
   return req.schoolId;
 }
 academicRouter.use(authenticate,loadAccessContext);
+async function hasTeacherRole(userId:string,schoolId:string) {
+  const memberships=await db.select({roleCode:roles.code}).from(userSchoolRoles).innerJoin(roles,eq(roles.id,userSchoolRoles.roleId))
+    .where(and(eq(userSchoolRoles.userId,userId),eq(userSchoolRoles.schoolId,schoolId)));
+  return memberships.some(item=>item.roleCode==="teacher"||item.roleCode==="school_principal");
+}
+
 academicRouter.get("/years",requirePermission("academic.manage"),async(req,res,next)=>{
   const schoolId=selectedSchool(req,res);if(!schoolId)return;
   try{const rows=await db.select().from(academicYears).where(eq(academicYears.schoolId,schoolId)).orderBy(asc(academicYears.startDate));res.json({data:rows});}
@@ -49,8 +55,7 @@ academicRouter.post("/classes",requirePermission("academic.manage"),async(req,re
     const year=await db.query.academicYears.findFirst({where:and(eq(academicYears.id,parsed.data.academicYearId),eq(academicYears.schoolId,schoolId))});
     if(!year){res.status(404).json({error:{code:"ACADEMIC_YEAR_NOT_FOUND",message:"Tahun ajaran tidak ditemukan pada unit ini."}});return;}
     if(parsed.data.homeroomTeacherId){
-      const membership=await db.query.userSchoolRoles.findFirst({where:and(eq(userSchoolRoles.userId,parsed.data.homeroomTeacherId),eq(userSchoolRoles.schoolId,schoolId))});
-      if(!membership){res.status(400).json({error:{code:"TEACHER_NOT_ASSIGNED",message:"Wali kelas harus terdaftar pada unit sekolah ini."}});return;}
+      if(!(await hasTeacherRole(parsed.data.homeroomTeacherId,schoolId))){res.status(400).json({error:{code:"TEACHER_NOT_ASSIGNED",message:"Wali kelas harus memiliki role guru pada unit sekolah ini."}});return;}
     }
     const [created]=await db.transaction(async(tx)=>{
       const rows=await tx.insert(classGroups).values({...parsed.data,schoolId,capacity:String(parsed.data.capacity)}).returning();
@@ -78,6 +83,19 @@ academicRouter.post("/subjects",requirePermission("academic.manage"),async(req,r
     res.status(201).json({data:created});
   }catch(error){if(typeof error==="object"&&error!==null&&"code"in error&&error.code==="23505"){res.status(409).json({error:{code:"SUBJECT_CODE_EXISTS",message:"Kode mata pelajaran sudah digunakan."}});return;}next(error);}
 });
+academicRouter.get("/classes/:classId/subjects",requirePermission("academic.manage"),async(req,res,next)=>{
+  const schoolId=selectedSchool(req,res);if(!schoolId)return;
+  const classId=z.uuid().safeParse(req.params.classId);
+  if(!classId.success){res.status(400).json({error:{code:"INVALID_CLASS_ID",message:"ID kelas tidak valid."}});return;}
+  try{
+    const classGroup=await db.query.classGroups.findFirst({where:and(eq(classGroups.id,classId.data),eq(classGroups.schoolId,schoolId))});
+    if(!classGroup){res.status(404).json({error:{code:"CLASS_NOT_FOUND",message:"Kelas tidak ditemukan pada unit ini."}});return;}
+    const rows=await db.select({id:classSubjects.id,subjectId:subjects.id,subjectCode:subjects.code,subjectName:subjects.name,teacherId:users.id,teacherName:users.fullName})
+      .from(classSubjects).innerJoin(subjects,eq(subjects.id,classSubjects.subjectId)).leftJoin(users,eq(users.id,classSubjects.teacherId))
+      .where(eq(classSubjects.classGroupId,classId.data));
+    res.json({data:rows});
+  }catch(error){next(error);}
+});
 academicRouter.post("/classes/:classId/subjects",requirePermission("academic.manage"),async(req,res,next)=>{
   const schoolId=selectedSchool(req,res);if(!schoolId)return;
   const classId=z.uuid().safeParse(req.params.classId);
@@ -88,8 +106,7 @@ academicRouter.post("/classes/:classId/subjects",requirePermission("academic.man
     const subject=await db.query.subjects.findFirst({where:and(eq(subjects.id,parsed.data.subjectId),eq(subjects.schoolId,schoolId))});
     if(!classGroup||!subject){res.status(404).json({error:{code:"CLASS_OR_SUBJECT_NOT_FOUND",message:"Kelas atau mata pelajaran tidak ditemukan pada unit ini."}});return;}
     if(parsed.data.teacherId){
-      const membership=await db.query.userSchoolRoles.findFirst({where:and(eq(userSchoolRoles.userId,parsed.data.teacherId),eq(userSchoolRoles.schoolId,schoolId))});
-      if(!membership){res.status(400).json({error:{code:"TEACHER_NOT_ASSIGNED",message:"Guru harus terdaftar pada unit sekolah ini."}});return;}
+      if(!(await hasTeacherRole(parsed.data.teacherId,schoolId))){res.status(400).json({error:{code:"TEACHER_NOT_ASSIGNED",message:"Pengajar harus memiliki role guru pada unit sekolah ini."}});return;}
     }
     const [created]=await db.transaction(async(tx)=>{
       const rows=await tx.insert(classSubjects).values({classGroupId:classId.data,subjectId:subject.id,teacherId:parsed.data.teacherId}).returning();
