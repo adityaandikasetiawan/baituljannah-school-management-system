@@ -33,7 +33,7 @@ studentsRouter.get("/", requirePermission("student.read"), async (req, res, next
       id: students.id, nisn: students.nisn, fullName: students.fullName, preferredName: students.preferredName,
       gender: students.gender, birthDate: students.birthDate, recordStatus: students.recordStatus,
       enrollmentId: studentEnrollments.id, admissionNumber: studentEnrollments.admissionNumber,
-      academicYear: studentEnrollments.academicYear, gradeLabel: studentEnrollments.gradeLabel, enrollmentStatus: studentEnrollments.status,
+      academicYear: studentEnrollments.academicYear, gradeLabel: studentEnrollments.gradeLabel, classGroupId: studentEnrollments.classGroupId, enrollmentStatus: studentEnrollments.status,
     }).from(studentEnrollments).innerJoin(students, eq(students.id, studentEnrollments.studentId))
       .where(and(...filters)).orderBy(asc(students.fullName)).limit(pageSize).offset((page-1)*pageSize);
     res.json({ data: rows, meta: { page, pageSize, returned: rows.length } });
