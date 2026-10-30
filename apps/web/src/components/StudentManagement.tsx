@@ -4,11 +4,13 @@ import type { TableColumnsType } from "antd";
 import { api } from "../lib/api";
 const { Text } = Typography;
 type SchoolUnit = { id:string; code:string; name:string };
-type Student = { id:string; fullName:string; nisn:string|null; admissionNumber:string; academicYear:string; gradeLabel:string; enrollmentStatus:string; gender:string };
+type Student = { id:string; fullName:string; nisn:string|null; admissionNumber:string; academicYear:string; gradeLabel:string; classGroupId:string|null; enrollmentStatus:string; gender:string };
+type ClassOption={id:string;name:string;gradeLabel:string;academicYear:string};
 type StudentForm = { fullName:string; nisn?:string; gender:"male"|"female"; birthDate?:string; admissionNumber:string; academicYear:string; gradeLabel:string; guardianName?:string; guardianRelationship?:"father"|"mother"|"guardian"|"other"; guardianPhone?:string; guardianEmail?:string };
 export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
   const [schoolId,setSchoolId]=useState<string>();
   const [rows,setRows]=useState<Student[]>([]);
+  const [classes,setClasses]=useState<ClassOption[]>([]);
   const [loading,setLoading]=useState(false);
   const [saving,setSaving]=useState(false);
   const [open,setOpen]=useState(false);
@@ -23,6 +25,7 @@ export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
     try{
       const response=await api.get("/api/v1/students",{headers:{"x-school-id":schoolId},params:{q:query||undefined,page:1,pageSize:100}});
       setRows(response.data.data as Student[]);
+      try{const classResponse=await api.get("/api/v1/academic/classes",{headers:{"x-school-id":schoolId}});setClasses(classResponse.data.data as ClassOption[]);}catch{setClasses([]);}
     }catch{message.error("Data siswa gagal dimuat.");}
     finally{setLoading(false);}
   }
@@ -47,7 +50,7 @@ export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
   const columns:TableColumnsType<Student>=[
     {title:"Nomor Induk",dataIndex:"admissionNumber",key:"admissionNumber"},
     {title:"Nama Siswa",dataIndex:"fullName",key:"fullName",render:(value:string,row)=><><Text strong>{value}</Text><div><Text type="secondary">NISN: {row.nisn||"Belum diisi"}</Text></div></>},
-    {title:"Kelas",dataIndex:"gradeLabel",key:"gradeLabel"},
+    {title:"Kelas",dataIndex:"gradeLabel",key:"gradeLabel",render:(value:string,row)=><Select size="small" style={{minWidth:150}} value={row.classGroupId??undefined} placeholder={value} allowClear options={classes.filter(c=>c.academicYear===row.academicYear).map(c=>({value:c.id,label:c.name}))} onChange={async next=>{if(!schoolId)return;try{await api.patch(`/api/v1/students/${row.id}/enrollment`,{classGroupId:next??null},{headers:{"x-school-id":schoolId}});message.success("Penempatan kelas diperbarui.");await load();}catch(error:unknown){const response=(error as {response?:{data?:{error?:{message?:string}}}}).response;message.error(response?.data?.error?.message??"Penempatan kelas gagal diperbarui.");}}}/>},
     {title:"Tahun Ajaran",dataIndex:"academicYear",key:"academicYear"},
     {title:"Jenis Kelamin",dataIndex:"gender",key:"gender",render:(value:string)=>value==="male"?"Laki-laki":"Perempuan"},
     {title:"Status",dataIndex:"enrollmentStatus",key:"enrollmentStatus",render:(value:string)=><Tag color={value==="active"?"green":"gold"}>{value.toUpperCase()}</Tag>},
