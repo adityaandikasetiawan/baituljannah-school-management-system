@@ -5,7 +5,7 @@ import type { Request, Response } from "express";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
-import { auditLogs, schoolSites, schoolUnits, sitePages, sitePageVersions, sitePublications, siteTemplates, siteDomains } from "../../db/schema/index.js";
+import { auditLogs, schoolSites, schoolUnits, sitePages, sitePageVersions, sitePublications, siteTemplates, siteDomains, siteAssets } from "../../db/schema/index.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { loadAccessContext } from "../access/access-context.js";
 import { requirePermission } from "../../middleware/require-permission.js";
@@ -22,6 +22,33 @@ function selectedSchool(req: Request, res: Response): string | null {
 async function findSite(schoolId: string) {
   return db.query.schoolSites.findFirst({ where: eq(schoolSites.schoolId, schoolId) });
 }
+cmsRouter.get("/assets", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {
+  const schoolId = selectedSchool(req, res);
+  if (!schoolId) return;
+  try {
+    const site = await findSite(schoolId);
+    if (!site) { res.status(404).json({ error: { code: "SITE_NOT_FOUND", message: "Website tidak ditemukan." } }); return; }
+    const assets = await db.select({ id: siteAssets.id, storageKey: siteAssets.storageKey, originalName: siteAssets.originalName, mimeType: siteAssets.mimeType, sizeBytes: siteAssets.sizeBytes, createdAt: siteAssets.createdAt })
+      .from(siteAssets).where(eq(siteAssets.siteId, site.id)).orderBy(desc(siteAssets.createdAt));
+    res.json({ data: assets });
+  } catch (error) { next(error); }
+});
+cmsRouter.post("/assets/external", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {
+  const schoolId = selectedSchool(req, res);
+  if (!schoolId) return;
+  const parsed = z.object({ url: z.string().url().refine((value) => new URL(value).protocol === "https:", "Media URL harus menggunakan HTTPS."), originalName: z.string().trim().min(1).max(255) }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Data media tidak valid.", details: parsed.error.flatten() } }); return; }
+  try {
+    const site = await findSite(schoolId);
+    if (!site) { res.status(404).json({ error: { code: "SITE_NOT_FOUND", message: "Website tidak ditemukan." } }); return; }
+    const [asset] = await db.transaction(async (tx) => {
+      const rows = await tx.insert(siteAssets).values({ siteId: site.id, storageKey: parsed.data.url, originalName: parsed.data.originalName, mimeType: "external/url", sizeBytes: "0", uploadedBy: req.auth!.sub }).returning();
+      await tx.insert(auditLogs).values({ actorUserId: req.auth!.sub, schoolId, action: "cms.external_asset_added", entityType: "site_asset", entityId: rows[0]?.id, metadata: { originalName: parsed.data.originalName, source: "external_url" } });
+      return rows;
+    });
+    res.status(201).json({ data: asset });
+  } catch (error) { next(error); }
+});
 cmsRouter.get("/domains", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {
   const schoolId = selectedSchool(req, res);
   if (!schoolId) return;

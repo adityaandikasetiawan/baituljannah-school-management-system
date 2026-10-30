@@ -15,6 +15,7 @@ interface Page { id: string; title: string; slug: string; isHome: boolean; isPub
 interface SchoolUnit { id: string; code: string; name: string }
 interface Version { id: string; version: string; createdAt: string; document: { schemaVersion: "1.0"; blocks: Block[] } }
 interface SiteDomain { id:string;hostname:string;verifiedAt:string|null;isPrimary:boolean;verificationHost:string;verificationToken:string }
+interface SiteAsset { id:string;storageKey:string;originalName:string;mimeType:string;createdAt:string }
 const blockLabels: Record<Block["type"], string> = { hero: "Banner utama", heading: "Judul bagian", rich_text: "Teks informasi", image: "Gambar", notice: "Pengumuman", button: "Tombol tautan" };
 const newBlock = (type: Block["type"]): Block => {
   const id = `block-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
@@ -33,6 +34,10 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
   const [versions, setVersions] = useState<Version[]>([]);
   const [templates, setTemplates] = useState<{id:string;code:string;name:string}[]>([]);
   const [domains,setDomains]=useState<SiteDomain[]>([]);
+  const [assets,setAssets]=useState<SiteAsset[]>([]);
+  const [assetUrl,setAssetUrl]=useState("");
+  const [assetName,setAssetName]=useState("");
+  const [assetSaving,setAssetSaving]=useState(false);
   const [domainHostname,setDomainHostname]=useState("");
   const [domainSaving,setDomainSaving]=useState(false);
   const [templateId, setTemplateId] = useState<string>();
@@ -55,14 +60,15 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
     if (!schoolId) return;
     setLoading(true);
     try {
-      const [siteResponse, templateResponse, domainResponse] = await Promise.all([
-        api.get("/api/v1/cms/site", headers), api.get("/api/v1/cms/templates", headers), api.get("/api/v1/cms/domains", headers),
+      const [siteResponse, templateResponse, domainResponse, assetResponse] = await Promise.all([
+        api.get("/api/v1/cms/site", headers), api.get("/api/v1/cms/templates", headers), api.get("/api/v1/cms/domains", headers), api.get("/api/v1/cms/assets", headers),
       ]);
       const siteData = siteResponse.data.data as {site:{templateId:string|null};pages:Page[]};
       setPages(siteData.pages);
       setTemplateId(siteData.site.templateId ?? undefined);
       setTemplates(templateResponse.data.data as {id:string;code:string;name:string}[]);
       setDomains(domainResponse.data.data as SiteDomain[]);
+      setAssets(assetResponse.data.data as SiteAsset[]);
       const nextId = selectedPageId && siteData.pages.some(p=>p.id===selectedPageId) ? selectedPageId : siteData.pages[0]?.id;
       setSelectedPageId(nextId);
     } catch (error: unknown) {
@@ -81,6 +87,23 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
     } catch { message.error("Konten halaman gagal dimuat."); }
   }
   useEffect(()=>{ if(selectedPageId) void loadPage(selectedPageId); else setBlocks([]); },[selectedPageId,schoolId]);
+  async function addExternalAsset() {
+    if(!schoolId || !assetUrl.trim() || !assetName.trim()) return;
+    setAssetSaving(true);
+    try {
+      await api.post("/api/v1/cms/assets/external",{url:assetUrl.trim(),originalName:assetName.trim()},headers);
+      setAssetUrl("");setAssetName("");
+      message.success("Referensi media berhasil ditambahkan.");
+      await loadSite();
+    } catch(error:unknown) {
+      const response=(error as {response?:{data?:{error?:{message?:string}}}}).response;
+      message.error(response?.data?.error?.message ?? "Referensi media gagal ditambahkan.");
+    } finally { setAssetSaving(false); }
+  }
+  function useAsset(asset:SiteAsset) {
+    setBlocks(current=>[...current,{id:`asset-${asset.id}`,type:"image",url:asset.storageKey,alt:asset.originalName}]);
+    message.success("Gambar ditambahkan ke draft halaman. Simpan untuk membuat versi baru.");
+  }
   async function addDomain() {
     if(!schoolId || !domainHostname.trim()) return;
     setDomainSaving(true);
@@ -261,6 +284,21 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
         </Card>
       </Space>
     </div>
+    <Card title="Media Library" extra={<Tag>{assets.length} referensi</Tag>}>
+      <Space wrap style={{width:"100%"}}>
+        <Input style={{minWidth:220,maxWidth:300}} value={assetName} onChange={event=>setAssetName(event.target.value)} placeholder="Nama gambar / alt text"/>
+        <Input style={{minWidth:260,maxWidth:460}} value={assetUrl} onChange={event=>setAssetUrl(event.target.value)} placeholder="https://.../gambar.webp"/>
+        <Button type="primary" loading={assetSaving} disabled={!assetName.trim()||!assetUrl.trim()} onClick={()=>void addExternalAsset()}>Tambah URL Media</Button>
+      </Space>
+      <Text type="secondary" style={{display:"block",marginTop:8}}>Saat ini media dapat direferensikan dari URL HTTPS. Upload file langsung dan penyimpanan S3 akan diaktifkan setelah konfigurasi storage tersedia.</Text>
+      <Divider/>
+      {assets.length===0?<Empty description="Belum ada media"/>:<Space direction="vertical" style={{width:"100%"}}>
+        {assets.map(asset=><div key={asset.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}>
+          <div style={{minWidth:0}}><Text strong>{asset.originalName}</Text><div><Text type="secondary" style={{fontSize:11}} ellipsis>{asset.storageKey}</Text></div></div>
+          <Button size="small" disabled={!selectedPageId} onClick={()=>useAsset(asset)}>Gunakan di Halaman</Button>
+        </div>)}
+      </Space>}
+    </Card>
     <Card title="Domain Website" extra={<Tag color="blue">{domains.length} domain</Tag>}>
       <Space wrap style={{width:"100%"}}>
         <Input style={{minWidth:260,maxWidth:420}} value={domainHostname} onChange={event=>setDomainHostname(event.target.value)} placeholder="contoh: sd.baituljannah.sch.id"/>

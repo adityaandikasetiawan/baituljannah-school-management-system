@@ -17,6 +17,13 @@ All authoring requests require a bearer token, `x-school-id`, and server-side `w
 
 Supported block types in schema 1.0: hero, heading, rich_text, image, notice, and button. Documents are validated by Zod before storage. Page versions are append-only; publication records point to the exact version made public.
 
+## Media library
+
+- `GET /api/v1/cms/assets` — list media references for the selected school.
+- `POST /api/v1/cms/assets/external` — register an HTTPS image URL as a media reference.
+
+Direct binary upload and managed object storage are not implemented yet. External media references are scoped to one school website.
+
 ## Custom domains
 
 - `GET /api/v1/cms/domains` — list domains for the selected school.
