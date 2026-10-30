@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, uuid, varchar, text, boolean, timestamp, jsonb, uniqueIndex, index, primaryKey, date } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, uuid, varchar, text, boolean, timestamp, jsonb, uniqueIndex, index, primaryKey, date, integer } from "drizzle-orm/pg-core";
 
 export const unitStatus = pgEnum("unit_status", ["active", "inactive", "archived"]);
 export const userStatus = pgEnum("user_status", ["invited", "active", "suspended"]);
