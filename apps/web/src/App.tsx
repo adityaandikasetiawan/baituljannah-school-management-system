@@ -13,6 +13,7 @@ import { APP_VERSION } from "./version";
 import { UserManagement } from "./components/UserManagement";
 import { CmsManagement } from "./components/CmsManagement";
 import { StudentManagement } from "./components/StudentManagement";
+import { AcademicManagement } from "./components/AcademicManagement";
 import { PublicSchoolSite } from "./components/PublicSchoolSite";
 
 const { Header, Sider, Content, Footer } = Layout;
@@ -159,7 +160,7 @@ function AdminApp() {
         {key:"users",icon:<TeamOutlined/>,label:"Pengguna & Akses"},
         {key:"website",icon:<GlobalOutlined/>,label:"Website Builder"},
         {key:"students",icon:<TeamOutlined/>,label:"Data Siswa"},
-        {key:"academic",icon:<BookOutlined/>,label:"Akademik",disabled:true},
+        {key:"academic",icon:<BookOutlined/>,label:"Akademik"},
         {key:"security",icon:<SafetyCertificateOutlined/>,label:"Audit & Keamanan",disabled:true}
       ]}/>
     </Sider>
@@ -199,6 +200,8 @@ function AdminApp() {
         {activeMenu === "website" && <CmsManagement schoolUnits={units} />}
         {activeMenu === "students" && <div className="page-heading"><div><Text type="secondary">BAITULJANNAH / ACADEMIC</Text><Title level={2}>Data Siswa</Title><Text type="secondary">Kelola identitas dan pendaftaran siswa per unit sekolah.</Text></div></div>}
         {activeMenu === "students" && <StudentManagement schoolUnits={units} />}
+        {activeMenu === "academic" && <div className="page-heading"><div><Text type="secondary">BAITULJANNAH / ACADEMIC</Text><Title level={2}>Manajemen Akademik</Title><Text type="secondary">Kelola tahun ajaran, kelas, dan mata pelajaran.</Text></div></div>}
+        {activeMenu === "academic" && <AcademicManagement schoolUnits={units} />}
       </Content>
       <Footer className="app-footer">Baituljannah SMIS · v{APP_VERSION} · API v1</Footer>
     </Layout>
