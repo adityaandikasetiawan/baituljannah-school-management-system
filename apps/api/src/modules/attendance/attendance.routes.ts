@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Request, Response as ExpressResponse } from "express";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
 import { academicYears, attendanceRecords, attendanceSessions, auditLogs, classGroups, classSubjects, schoolUnits, studentEnrollments, students, subjects } from "../../db/schema/index.js";
@@ -36,6 +36,12 @@ attendanceRouter.post("/sessions",requirePermission("attendance.manage"),async(r
  try{
   const classGroup=await db.query.classGroups.findFirst({where:and(eq(classGroups.id,parsed.data.classGroupId),eq(classGroups.schoolId,schoolId))});
   if(!classGroup){res.status(404).json({error:{code:"CLASS_NOT_FOUND",message:"Kelas tidak ditemukan pada unit ini."}});return;}
+  const duplicateFilter=parsed.data.subjectId
+    ? and(eq(attendanceSessions.classGroupId,classGroup.id),eq(attendanceSessions.sessionDate,parsed.data.sessionDate),eq(attendanceSessions.subjectId,parsed.data.subjectId))
+    : and(eq(attendanceSessions.classGroupId,classGroup.id),eq(attendanceSessions.sessionDate,parsed.data.sessionDate),isNull(attendanceSessions.subjectId));
+  const duplicate=await db.query.attendanceSessions.findFirst({where:duplicateFilter});
+  if(duplicate){res.status(409).json({error:{code:"SESSION_ALREADY_EXISTS",message:"Sesi absensi untuk kelas, tanggal, dan mata pelajaran tersebut sudah ada."}});return;}
+
   if(parsed.data.subjectId){
    const assignment=await db.query.classSubjects.findFirst({where:and(eq(classSubjects.classGroupId,classGroup.id),eq(classSubjects.subjectId,parsed.data.subjectId))});
    if(!assignment){res.status(400).json({error:{code:"SUBJECT_NOT_ASSIGNED",message:"Mata pelajaran belum ditugaskan pada kelas ini."}});return;}
@@ -57,7 +63,7 @@ attendanceRouter.get("/sessions/:sessionId",requirePermission("attendance.manage
   const session=await db.query.attendanceSessions.findFirst({where:and(eq(attendanceSessions.id,id.data),eq(attendanceSessions.schoolId,schoolId))});
   if(!session){res.status(404).json({error:{code:"SESSION_NOT_FOUND",message:"Sesi absensi tidak ditemukan."}});return;}
   const records=await db.select({id:attendanceRecords.id,studentId:students.id,fullName:students.fullName,admissionNumber:studentEnrollments.admissionNumber,status:attendanceRecords.status,note:attendanceRecords.note})
-   .from(attendanceRecords).innerJoin(students,eq(students.id,attendanceRecords.studentId)).innerJoin(studentEnrollments,and(eq(studentEnrollments.studentId,students.id),eq(studentEnrollments.schoolId,schoolId)))
+   .from(attendanceRecords).innerJoin(students,eq(students.id,attendanceRecords.studentId)).innerJoin(studentEnrollments,and(eq(studentEnrollments.studentId,students.id),eq(studentEnrollments.schoolId,schoolId),eq(studentEnrollments.classGroupId,session.classGroupId)))
    .where(eq(attendanceRecords.sessionId,session.id)).orderBy(asc(students.fullName));
   res.json({data:{session,records}});
  }catch(error){next(error);}
