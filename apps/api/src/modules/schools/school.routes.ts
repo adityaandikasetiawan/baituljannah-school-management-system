@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { db } from "../../db/client.js";
 import { auditLogs, schoolSites, schoolUnits } from "../../db/schema/index.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { loadAccessContext } from "../access/access-context.js";
 import { requirePermission } from "../../middleware/require-permission.js";
+import type { AccessContext } from "../access/tenant-access.js";
 
 export const schoolRouter = Router();
 const createSchema = z.object({
@@ -13,11 +15,15 @@ const createSchema = z.object({
   name: z.string().trim().min(2).max(180),
   level: z.enum(["TK", "SD", "SMP", "SMA", "SLB"]),
 });
-
 schoolRouter.use(authenticate, loadAccessContext);
-schoolRouter.get("/", requirePermission("school.read"), async (_req, res, next) => {
-  try { const rows = await db.select().from(schoolUnits); res.json({ data: rows }); }
-  catch (error) { next(error); }
+schoolRouter.get("/", requirePermission("school.read"), async (req, res, next) => {
+  try {
+    const context = res.locals.accessContext as AccessContext;
+    const rows = context.globalPermissions.includes("school.read")
+      ? await db.select().from(schoolUnits)
+      : await db.select().from(schoolUnits).where(eq(schoolUnits.id, req.schoolId!));
+    res.json({ data: rows });
+  } catch (error) { next(error); }
 });
 schoolRouter.post("/", requirePermission("school.manage"), async (req, res, next) => {
   const parsed = createSchema.safeParse(req.body);
