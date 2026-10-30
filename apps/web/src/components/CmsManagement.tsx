@@ -38,6 +38,7 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [blockType, setBlockType] = useState<Block["type"]>("rich_text");
   const [previewMode, setPreviewMode] = useState<"desktop"|"tablet"|"mobile">("desktop");
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [createForm] = Form.useForm<{title:string;slug:string;isHome:boolean}>();
   const headers = useMemo(() => ({ headers: { "x-school-id": schoolId ?? "" } }), [schoolId]);
 
@@ -116,7 +117,7 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
       await loadSite(); await loadPage(selectedPageId);
     } catch { message.error("Rollback gagal dilakukan."); }
   }
-  function updateBlock(index:number, patch:Partial<Block>) {
+  function updateBlock(index:number, patch:Record<string, string | undefined>) {
     setBlocks(current=>current.map((block,i)=>i===index?({...block,...patch} as Block):block));
   }
   function moveBlock(index:number,direction:-1|1) {
@@ -124,7 +125,7 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
   }
   function renderBlock(block:Block,index:number) {
     const field=(label:string,value:string,onChange:(v:string)=>void,placeholder?:string)=> <div style={{marginBottom:12}}><Text type="secondary">{label}</Text><Input value={value} placeholder={placeholder} onChange={e=>onChange(e.target.value)}/></div>;
-    return <Card key={block.id} size="small" title={<Space><Tag>{index+1}</Tag>{blockLabels[block.type]}</Space>} extra={<Space>
+    return <div key={block.id} draggable onDragStart={() => setDraggingIndex(index)} onDragOver={event => event.preventDefault()} onDrop={() => { if (draggingIndex !== null && draggingIndex !== index) { setBlocks(current => { const next=[...current]; const [moved]=next.splice(draggingIndex,1); if(moved) next.splice(index,0,moved); return next; }); } setDraggingIndex(null); }} onDragEnd={() => setDraggingIndex(null)} style={{cursor:"grab",opacity:draggingIndex===index?0.45:1}}><Card size="small" title={<Space><Tag>{index+1}</Tag>{blockLabels[block.type]}</Space>} extra={<Space>
       <Tooltip title="Naik"><Button size="small" icon={<ArrowUpOutlined/>} disabled={index===0} onClick={()=>moveBlock(index,-1)}/></Tooltip>
       <Tooltip title="Turun"><Button size="small" icon={<ArrowDownOutlined/>} disabled={index===blocks.length-1} onClick={()=>moveBlock(index,1)}/></Tooltip>
       <Tooltip title="Hapus"><Button danger size="small" icon={<DeleteOutlined/>} onClick={()=>setBlocks(current=>current.filter((_,i)=>i!==index))}/></Tooltip>
@@ -135,7 +136,7 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
       {block.type==="image" && <>{field("URL gambar",block.url,v=>updateBlock(index,{url:v}))}{field("Teks alternatif",block.alt,v=>updateBlock(index,{alt:v}))}{field("Keterangan",block.caption??"",v=>updateBlock(index,{caption:v||undefined}))}</>}
       {block.type==="notice" && <>{field("Judul pengumuman",block.title,v=>updateBlock(index,{title:v}))}<Input.TextArea rows={3} value={block.text} onChange={e=>updateBlock(index,{text:e.target.value})}/></>}
       {block.type==="button" && <>{field("Label tombol",block.label,v=>updateBlock(index,{label:v}))}{field("URL tujuan",block.url,v=>updateBlock(index,{url:v}))}</>}
-    </Card>;
+    </Card></div>;
   }
   const selected=pages.find(p=>p.id===selectedPageId);
   const previewWidth=previewMode==="desktop"?"100%":previewMode==="tablet"?760:375;
