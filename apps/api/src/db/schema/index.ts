@@ -9,6 +9,9 @@ export const academicYearStatus = pgEnum("academic_year_status", ["draft", "acti
 export const attendanceSessionStatus = pgEnum("attendance_session_status", ["draft", "submitted", "locked"]);
 export const attendanceRecordStatus = pgEnum("attendance_record_status", ["unmarked", "present", "absent", "late", "sick", "permission"]);
 export const teacherEmploymentStatus = pgEnum("teacher_employment_status", ["active", "leave", "inactive"]);
+export const invoiceStatus = pgEnum("invoice_status", ["draft", "issued", "partially_paid", "paid", "overdue", "cancelled"]);
+export const paymentStatus = pgEnum("payment_status", ["pending", "verified", "rejected"]);
+export const paymentMethod = pgEnum("payment_method", ["cash", "bank_transfer", "other"]);
 
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -290,3 +293,36 @@ export const teacherProfiles = pgTable("teacher_profiles", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [uniqueIndex("teacher_profile_school_user_uq").on(t.schoolId, t.userId), uniqueIndex("teacher_profile_school_employee_uq").on(t.schoolId, t.employeeNumber)]);
+
+export const invoices = pgTable("invoices", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  schoolId: uuid("school_id").notNull().references(() => schoolUnits.id, { onDelete: "cascade" }),
+  enrollmentId: uuid("enrollment_id").notNull().references(() => studentEnrollments.id),
+  invoiceNumber: varchar("invoice_number", { length: 48 }).notNull(),
+  description: varchar("description", { length: 240 }).notNull(),
+  period: varchar("period", { length: 32 }),
+  dueDate: date("due_date", { mode: "string" }).notNull(),
+  amountTotal: integer("amount_total").notNull(),
+  amountPaid: integer("amount_paid").default(0).notNull(),
+  status: invoiceStatus("status").default("draft").notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  issuedAt: timestamp("issued_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [uniqueIndex("invoice_school_number_uq").on(t.schoolId, t.invoiceNumber), index("invoice_school_status_idx").on(t.schoolId, t.status), index("invoice_enrollment_idx").on(t.enrollmentId)]);
+
+export const payments = pgTable("payments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  schoolId: uuid("school_id").notNull().references(() => schoolUnits.id, { onDelete: "cascade" }),
+  invoiceId: uuid("invoice_id").notNull().references(() => invoices.id),
+  amount: integer("amount").notNull(),
+  method: paymentMethod("method").notNull(),
+  referenceNumber: varchar("reference_number", { length: 120 }),
+  proofUrl: text("proof_url"),
+  status: paymentStatus("status").default("pending").notNull(),
+  submittedBy: uuid("submitted_by").references(() => users.id),
+  verifiedBy: uuid("verified_by").references(() => users.id),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  rejectionReason: varchar("rejection_reason", { length: 500 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [index("payments_school_status_idx").on(t.schoolId, t.status), index("payments_invoice_idx").on(t.invoiceId)]);
