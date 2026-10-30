@@ -43,6 +43,24 @@ cmsRouter.get("/templates", authenticate, loadAccessContext, requirePermission("
     res.json({ data: rows });
   } catch (error) { next(error); }
 });
+cmsRouter.patch("/site/template", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {
+  const schoolId = selectedSchool(req, res);
+  if (!schoolId) return;
+  const parsed = z.object({ templateId: z.uuid() }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Template tidak valid." } }); return; }
+  try {
+    const site = await findSite(schoolId);
+    if (!site) { res.status(404).json({ error: { code: "SITE_NOT_FOUND", message: "Website tidak ditemukan." } }); return; }
+    const template = await db.query.siteTemplates.findFirst({ where: and(eq(siteTemplates.id, parsed.data.templateId), eq(siteTemplates.isActive, true)) });
+    if (!template) { res.status(404).json({ error: { code: "TEMPLATE_NOT_FOUND", message: "Template aktif tidak ditemukan." } }); return; }
+    const [updated] = await db.transaction(async (tx) => {
+      const rows = await tx.update(schoolSites).set({ templateId: template.id, updatedAt: new Date() }).where(eq(schoolSites.id, site.id)).returning();
+      await tx.insert(auditLogs).values({ actorUserId: req.auth!.sub, schoolId, action: "cms.template_changed", entityType: "school_site", entityId: site.id, metadata: { templateId: template.id, templateCode: template.code } });
+      return rows;
+    });
+    res.json({ data: { site: updated, template } });
+  } catch (error) { next(error); }
+});
 cmsRouter.get("/site", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {
   const schoolId = selectedSchool(req, res);
   if (!schoolId) return;

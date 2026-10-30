@@ -32,6 +32,7 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
   const [versions, setVersions] = useState<Version[]>([]);
   const [templates, setTemplates] = useState<{id:string;code:string;name:string}[]>([]);
   const [templateId, setTemplateId] = useState<string>();
+  const [templateSaving, setTemplateSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -72,6 +73,16 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
     } catch { message.error("Konten halaman gagal dimuat."); }
   }
   useEffect(()=>{ if(selectedPageId) void loadPage(selectedPageId); else setBlocks([]); },[selectedPageId,schoolId]);
+  async function changeTemplate(nextTemplateId:string) {
+    if (!schoolId) return;
+    setTemplateSaving(true);
+    try {
+      await api.patch("/api/v1/cms/site/template",{templateId:nextTemplateId},headers);
+      setTemplateId(nextTemplateId);
+      message.success("Template website diperbarui. Konten halaman tidak diubah.");
+    } catch { message.error("Template website gagal diperbarui."); }
+    finally { setTemplateSaving(false); }
+  }
   async function createPage(values:{title:string;slug:string;isHome:boolean}) {
     if(!schoolId) return;
     setCreating(true);
@@ -156,8 +167,8 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
         </Space>}
         <Divider/>
         <Text type="secondary">Template aktif</Text>
-        <Select style={{width:"100%",marginTop:8}} value={templateId} disabled options={templates.map(t=>({value:t.id,label:t.name}))} placeholder="Belum ada template"/>
-        <Text type="secondary" style={{display:"block",fontSize:11,marginTop:8}}>Template global dikelola oleh Super Admin.</Text>
+        <Select style={{width:"100%",marginTop:8}} value={templateId} loading={templateSaving} onChange={value=>void changeTemplate(value)} options={templates.map(t=>({value:t.id,label:t.name}))} placeholder="Pilih template"/>
+        <Text type="secondary" style={{display:"block",fontSize:11,marginTop:8}}>Pergantian template tidak menimpa konten halaman yang sudah dibuat.</Text>
       </Card>
       <Space direction="vertical" size="middle" style={{width:"100%"}}>
         <Card loading={loading}>
