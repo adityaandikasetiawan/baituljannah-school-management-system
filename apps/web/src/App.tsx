@@ -166,6 +166,7 @@ function AdminApp() {
         {key:"teachers",icon:<TeamOutlined/>,label:"Data Guru"},
         {key:"academic",icon:<BookOutlined/>,label:"Akademik"},
         {key:"attendance",icon:<CalendarOutlined/>,label:"Absensi"},
+        {key:"finance",icon:<BankOutlined/>,label:"Keuangan"},
         {key:"security",icon:<SafetyCertificateOutlined/>,label:"Audit & Keamanan",disabled:true}
       ]}/>
     </Sider>
