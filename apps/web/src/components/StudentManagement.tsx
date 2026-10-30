@@ -1,0 +1,68 @@
+import { useEffect, useState } from "react";
+import { Button, Card, Form, Input, Modal, Select, Space, Table, Tag, Typography, message } from "antd";
+import type { TableColumnsType } from "antd";
+import { api } from "../lib/api";
+const { Text } = Typography;
+type SchoolUnit = { id:string; code:string; name:string };
+type Student = { id:string; fullName:string; nisn:string|null; admissionNumber:string; academicYear:string; gradeLabel:string; enrollmentStatus:string; gender:string };
+type StudentForm = { fullName:string; nisn?:string; gender:"male"|"female"; birthDate?:string; admissionNumber:string; academicYear:string; gradeLabel:string };
+export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
+  const [schoolId,setSchoolId]=useState<string>();
+  const [rows,setRows]=useState<Student[]>([]);
+  const [loading,setLoading]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [open,setOpen]=useState(false);
+  const [query,setQuery]=useState("");
+  const [form]=Form.useForm<StudentForm>();
+  useEffect(()=>{if(!schoolId&&schoolUnits.length)setSchoolId(schoolUnits[0]!.id);},[schoolUnits,schoolId]);
+  async function load(){
+    if(!schoolId)return;
+    setLoading(true);
+    try{
+      const response=await api.get("/api/v1/students",{headers:{"x-school-id":schoolId},params:{q:query||undefined,page:1,pageSize:100}});
+      setRows(response.data.data as Student[]);
+    }catch{message.error("Data siswa gagal dimuat.");}
+    finally{setLoading(false);}
+  }
+  useEffect(()=>{void load();},[schoolId]);
+  async function create(values:StudentForm){
+    if(!schoolId)return;
+    setSaving(true);
+    try{
+      await api.post("/api/v1/students",{...values,nisn:values.nisn||undefined,birthDate:values.birthDate||undefined,enrollmentStatus:"active",guardians:[]},{headers:{"x-school-id":schoolId}});
+      message.success("Data siswa berhasil ditambahkan.");
+      setOpen(false);form.resetFields();await load();
+    }catch(error:unknown){
+      const response=(error as {response?:{data?:{error?:{message?:string}}}}).response;
+      message.error(response?.data?.error?.message??"Data siswa gagal disimpan.");
+    }finally{setSaving(false);}
+  }
+  const columns:TableColumnsType<Student>=[
+    {title:"Nomor Induk",dataIndex:"admissionNumber",key:"admissionNumber"},
+    {title:"Nama Siswa",dataIndex:"fullName",key:"fullName",render:(value:string,row)=><><Text strong>{value}</Text><div><Text type="secondary">NISN: {row.nisn||"Belum diisi"}</Text></div></>},
+    {title:"Kelas",dataIndex:"gradeLabel",key:"gradeLabel"},
+    {title:"Tahun Ajaran",dataIndex:"academicYear",key:"academicYear"},
+    {title:"Jenis Kelamin",dataIndex:"gender",key:"gender",render:(value:string)=>value==="male"?"Laki-laki":"Perempuan"},
+    {title:"Status",dataIndex:"enrollmentStatus",key:"enrollmentStatus",render:(value:string)=><Tag color={value==="active"?"green":"gold"}>{value.toUpperCase()}</Tag>},
+  ];
+  return <Space direction="vertical" size="middle" style={{width:"100%"}}>
+    <Card><Space wrap style={{width:"100%",justifyContent:"space-between"}}>
+      <div><Text strong>Data Siswa</Text><div><Text type="secondary">Identitas dan pendaftaran siswa pada unit sekolah.</Text></div></div>
+      <Space wrap><Select style={{minWidth:240}} value={schoolId} onChange={setSchoolId} options={schoolUnits.map(u=>({value:u.id,label:`${u.code} — ${u.name}`}))}/><Button type="primary" disabled={!schoolId} onClick={()=>setOpen(true)}>Tambah Siswa</Button></Space>
+    </Space></Card>
+    <Card><Space wrap style={{marginBottom:16}}><Input.Search style={{width:320}} placeholder="Cari nama, NISN, nomor induk" value={query} onChange={e=>setQuery(e.target.value)} onSearch={()=>void load()}/><Button onClick={()=>void load()}>Refresh</Button></Space>
+      <Table rowKey="id" columns={columns} dataSource={rows} loading={loading} scroll={{x:850}} pagination={{pageSize:15}} locale={{emptyText:"Belum ada data siswa."}}/>
+    </Card>
+    <Modal title="Tambah Siswa" open={open} onCancel={()=>setOpen(false)} onOk={()=>form.submit()} confirmLoading={saving} okText="Simpan" cancelText="Batal" destroyOnHidden>
+      <Form form={form} layout="vertical" onFinish={create}>
+        <Form.Item name="fullName" label="Nama Lengkap" rules={[{required:true,min:2}]}><Input/></Form.Item>
+        <Form.Item name="nisn" label="NISN"><Input maxLength={10}/></Form.Item>
+        <Form.Item name="gender" label="Jenis Kelamin" rules={[{required:true}]}><Select options={[{value:"male",label:"Laki-laki"},{value:"female",label:"Perempuan"}]}/></Form.Item>
+        <Form.Item name="birthDate" label="Tanggal Lahir"><Input type="date"/></Form.Item>
+        <Form.Item name="admissionNumber" label="Nomor Induk" rules={[{required:true}]}><Input/></Form.Item>
+        <Form.Item name="academicYear" label="Tahun Ajaran" rules={[{required:true,pattern:/^\d{4}\/\d{4}$/}]}><Input placeholder="2026/2027"/></Form.Item>
+        <Form.Item name="gradeLabel" label="Kelas" rules={[{required:true}]}><Input placeholder="Kelas 1"/></Form.Item>
+      </Form>
+    </Modal>
+  </Space>;
+}
