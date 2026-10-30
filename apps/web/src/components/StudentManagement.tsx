@@ -12,6 +12,8 @@ export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
   const [loading,setLoading]=useState(false);
   const [saving,setSaving]=useState(false);
   const [open,setOpen]=useState(false);
+  const [detailOpen,setDetailOpen]=useState(false);
+  const [detail,setDetail]=useState<{student:Record<string,unknown>;enrollment:Record<string,unknown>;guardians:{id:string;fullName:string;relationship:string;phone:string;email:string|null;isPrimary:boolean}[]}|null>(null);
   const [query,setQuery]=useState("");
   const [form]=Form.useForm<StudentForm>();
   useEffect(()=>{if(!schoolId&&schoolUnits.length)setSchoolId(schoolUnits[0]!.id);},[schoolUnits,schoolId]);
@@ -37,6 +39,11 @@ export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
       message.error(response?.data?.error?.message??"Data siswa gagal disimpan.");
     }finally{setSaving(false);}
   }
+  async function showDetail(row:Student){
+    if(!schoolId)return;
+    try{const response=await api.get(`/api/v1/students/${row.id}`,{headers:{"x-school-id":schoolId}});setDetail(response.data.data as typeof detail);setDetailOpen(true);}
+    catch{message.error("Detail siswa gagal dimuat.");}
+  }
   const columns:TableColumnsType<Student>=[
     {title:"Nomor Induk",dataIndex:"admissionNumber",key:"admissionNumber"},
     {title:"Nama Siswa",dataIndex:"fullName",key:"fullName",render:(value:string,row)=><><Text strong>{value}</Text><div><Text type="secondary">NISN: {row.nisn||"Belum diisi"}</Text></div></>},
@@ -44,6 +51,7 @@ export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
     {title:"Tahun Ajaran",dataIndex:"academicYear",key:"academicYear"},
     {title:"Jenis Kelamin",dataIndex:"gender",key:"gender",render:(value:string)=>value==="male"?"Laki-laki":"Perempuan"},
     {title:"Status",dataIndex:"enrollmentStatus",key:"enrollmentStatus",render:(value:string)=><Tag color={value==="active"?"green":"gold"}>{value.toUpperCase()}</Tag>},
+    {title:"Detail",key:"detail",render:(_value,row)=><Button size="small" onClick={()=>void showDetail(row)}>Lihat</Button>},
     {title:"Ubah Status",key:"action",render:(_value,row)=><Select size="small" value={row.enrollmentStatus} style={{width:150}} onChange={async next=>{if(!schoolId)return;try{await api.patch(`/api/v1/students/${row.id}/enrollment`,{status:next},{headers:{"x-school-id":schoolId}});message.success("Status siswa diperbarui.");await load();}catch{message.error("Status siswa gagal diperbarui.");}}} options={[{value:"candidate",label:"Calon Siswa"},{value:"active",label:"Aktif"},{value:"graduated",label:"Lulus"},{value:"transferred",label:"Pindah"},{value:"withdrawn",label:"Mengundurkan Diri"}]}/>},
   ];
   return <Space direction="vertical" size="middle" style={{width:"100%"}}>
@@ -54,6 +62,21 @@ export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
     <Card><Space wrap style={{marginBottom:16}}><Input.Search style={{width:320}} placeholder="Cari nama, NISN, nomor induk" value={query} onChange={e=>setQuery(e.target.value)} onSearch={()=>void load()}/><Button onClick={()=>void load()}>Refresh</Button></Space>
       <Table rowKey="id" columns={columns} dataSource={rows} loading={loading} scroll={{x:850}} pagination={{pageSize:15}} locale={{emptyText:"Belum ada data siswa."}}/>
     </Card>
+    <Modal title="Detail Siswa" open={detailOpen} onCancel={()=>setDetailOpen(false)} footer={<Button onClick={()=>setDetailOpen(false)}>Tutup</Button>}>
+      {detail&&<Space direction="vertical" style={{width:"100%"}}>
+        <Typography.Title level={5}>{String(detail.student.fullName??"")}</Typography.Title>
+        <Text>NISN: {String(detail.student.nisn??"-")}</Text>
+        <Text>Tempat / tanggal lahir: {String(detail.student.birthPlace??"-")} / {String(detail.student.birthDate??"-")}</Text>
+        <Text>Alamat: {String(detail.student.address??"-")}</Text>
+        <Typography.Title level={5}>Pendaftaran</Typography.Title>
+        <Text>Nomor induk: {String(detail.enrollment.admissionNumber??"-")}</Text>
+        <Text>Tahun ajaran: {String(detail.enrollment.academicYear??"-")}</Text>
+        <Text>Kelas: {String(detail.enrollment.gradeLabel??"-")}</Text>
+        <Text>Status: {String(detail.enrollment.status??"-")}</Text>
+        <Typography.Title level={5}>Orang Tua / Wali</Typography.Title>
+        {detail.guardians.length===0?<Text type="secondary">Belum ada data orang tua atau wali.</Text>:detail.guardians.map(guardian=><Card key={guardian.id} size="small"><Text strong>{guardian.fullName}</Text>{guardian.isPrimary&&<Tag color="green">Utama</Tag>}<div><Text type="secondary">{guardian.relationship} · {guardian.phone}</Text></div><Text type="secondary">{guardian.email??""}</Text></Card>)}
+      </Space>}
+    </Modal>
     <Modal title="Tambah Siswa" open={open} onCancel={()=>setOpen(false)} onOk={()=>form.submit()} confirmLoading={saving} okText="Simpan" cancelText="Batal" destroyOnHidden>
       <Form form={form} layout="vertical" onFinish={create}>
         <Form.Item name="fullName" label="Nama Lengkap" rules={[{required:true,min:2}]}><Input/></Form.Item>
