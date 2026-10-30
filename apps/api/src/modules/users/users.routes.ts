@@ -11,7 +11,7 @@ import { loadAccessContext } from "../access/access-context.js";
 
 export const usersRouter = Router();
 const createUserSchema = z.object({
-  email: z.email().transform((value) => value.trim().toLowerCase()),
+  email: z.string().trim().pipe(z.email()).transform((value) => value.toLowerCase()),
   fullName: z.string().trim().min(2).max(180),
   password: z.string().min(12).max(128),
   roleCode: z.enum(["school_principal", "school_admin", "teacher", "finance", "content_editor"]),
