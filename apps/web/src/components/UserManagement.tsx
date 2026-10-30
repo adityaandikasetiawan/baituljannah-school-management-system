@@ -16,6 +16,9 @@ export function UserManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [assignForm] = Form.useForm<{ email: string; roleCode: string }>();
   const [form] = Form.useForm<CreateUser>();
 
   useEffect(() => {
@@ -55,6 +58,21 @@ export function UserManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
     } finally { setSaving(false); }
   }
 
+  async function assignExisting(values: { email: string; roleCode: string }) {
+    if (!schoolId) return;
+    setAssigning(true);
+    try {
+      await api.post("/api/v1/users/assign-existing", values, { headers: { "x-school-id": schoolId } });
+      message.success("Akun berhasil ditambahkan ke unit sekolah ini.");
+      setAssignOpen(false);
+      assignForm.resetFields();
+      await load();
+    } catch (error: unknown) {
+      const response = (error as { response?: { data?: { error?: { message?: string } } } }).response;
+      message.error(response?.data?.error?.message ?? "Akun gagal ditambahkan.");
+    } finally { setAssigning(false); }
+  }
+
   async function toggleStatus(user: SchoolUser) {
     if (!schoolId) return;
     const status = user.status === "active" ? "suspended" : "active";
@@ -79,7 +97,8 @@ export function UserManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
         <Space wrap>
           <Select style={{ minWidth: 240 }} placeholder="Pilih school unit" value={schoolId} onChange={setSchoolId}
             options={schoolUnits.map((unit) => ({ value: unit.id, label: `${unit.code} — ${unit.name}` }))} />
-          <Button type="primary" disabled={!schoolId} onClick={() => setOpen(true)}>Tambah Pengguna</Button>
+          <Button disabled={!schoolId} onClick={() => setAssignOpen(true)}>Tambahkan Akun Terdaftar</Button>
+          <Button type="primary" disabled={!schoolId} onClick={() => setOpen(true)}>Buat Pengguna Baru</Button>
         </Space>
       </Space>
     </Card>
@@ -91,6 +110,13 @@ export function UserManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
         <Form.Item name="roleCode" label="Peran" rules={[{ required: true }]}><Select placeholder="Pilih peran" options={roles.map((role) => ({ value: role.code, label: role.name }))}/></Form.Item>
         <Form.Item name="password" label="Password Awal" rules={[{ required: true, min: 12, message: "Password minimal 12 karakter." }]}><Input.Password autoComplete="new-password" placeholder="Minimal 12 karakter"/></Form.Item>
         <Text type="secondary">Akun dibuat aktif. Sampaikan password awal melalui kanal yang aman dan minta pengguna menggantinya setelah login. Alur undangan dan reset password akan menjadi tahap berikutnya.</Text>
+      </Form>
+    </Modal>
+    <Modal title="Tambahkan Akun yang Sudah Terdaftar" open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={() => assignForm.submit()} confirmLoading={assigning} okText="Tambahkan ke Unit" cancelText="Batal" destroyOnHidden>
+      <Form form={assignForm} layout="vertical" onFinish={assignExisting} requiredMark={false}>
+        <Form.Item name="email" label="Email Akun" rules={[{ required: true, type: "email" }]}><Input placeholder="email pengguna yang sudah terdaftar"/></Form.Item>
+        <Form.Item name="roleCode" label="Peran pada Unit Ini" rules={[{ required: true }]}><Select placeholder="Pilih peran" options={roles.map((role) => ({ value: role.code, label: role.name }))}/></Form.Item>
+        <Text type="secondary">Akun yang sama dapat memiliki peran berbeda di beberapa unit sekolah. Hak akses unit lain tidak berubah.</Text>
       </Form>
     </Modal>
   </Space>;

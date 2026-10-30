@@ -46,7 +46,7 @@ export default function App() {
   async function loadUnits() {
     setUnitsLoading(true);
     try {
-      const response = await api.get("/api/v1/school-units");
+      const response = await api.get("/api/v1/school-units/accessible");
       setUnits(response.data.data as SchoolUnit[]);
     } catch (error: unknown) {
       const status = (error as { response?: { status?: number } }).response?.status;
@@ -167,6 +167,9 @@ export default function App() {
         </> : <div className="page-heading">
           <div><Text type="secondary">BAITULJANNAH / FOUNDATION</Text><Title level={2}>School Units</Title><Text type="secondary">Kelola unit sekolah yang berada di bawah Yayasan Baituljannah.</Text></div>
           <Button type="primary" icon={<PlusOutlined/>} onClick={() => setCreateOpen(true)}>Tambah School Unit</Button>
+        </div>}
+        {activeMenu === "users" && <div className="page-heading">
+          <div><Text type="secondary">BAITULJANNAH / FOUNDATION</Text><Title level={2}>Pengguna & Akses</Title><Text type="secondary">Kelola akun dan penempatan peran pengguna pada setiap unit sekolah.</Text></div>
         </div>}
         {activeMenu === "units" && <Card>
           <Table rowKey="id" columns={columns} dataSource={units} loading={unitsLoading} pagination={{ pageSize: 10, showSizeChanger: false }} locale={{ emptyText: "Belum ada school unit. Tambahkan unit pertama untuk memulai." }} scroll={{ x: 640 }} />

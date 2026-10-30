@@ -16,6 +16,10 @@ const createUserSchema = z.object({
   password: z.string().min(12).max(128),
   roleCode: z.enum(["school_principal", "school_admin", "teacher", "finance", "content_editor"]),
 });
+const assignExistingSchema = z.object({
+  email: z.string().trim().pipe(z.email()).transform((value) => value.toLowerCase()),
+  roleCode: z.enum(["school_principal", "school_admin", "teacher", "finance", "content_editor"]),
+});
 const updateUserSchema = z.object({
   fullName: z.string().trim().min(2).max(180).optional(),
   status: z.enum(["active", "suspended", "invited"]).optional(),
@@ -108,6 +112,43 @@ usersRouter.post("/", async (req, res, next) => {
     }
     next(error);
   }
+});
+
+usersRouter.post("/assign-existing", async (req, res, next) => {
+  const schoolId = selectedSchool(req, res);
+  if (!schoolId) return;
+  const parsed = assignExistingSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Email atau role tidak valid." } });
+    return;
+  }
+  try {
+    const user = await db.query.users.findFirst({ where: eq(users.email, parsed.data.email) });
+    if (!user) {
+      res.status(404).json({ error: { code: "USER_NOT_FOUND", message: "Akun belum terdaftar. Buat akun baru terlebih dahulu." } });
+      return;
+    }
+    const role = await db.query.roles.findFirst({ where: and(eq(roles.code, parsed.data.roleCode), eq(roles.scope, "school")) });
+    if (!role) {
+      res.status(400).json({ error: { code: "ROLE_NOT_FOUND", message: "Role sekolah tidak tersedia." } });
+      return;
+    }
+    const membership = await db.query.userSchoolRoles.findFirst({
+      where: and(eq(userSchoolRoles.userId, user.id), eq(userSchoolRoles.schoolId, schoolId), eq(userSchoolRoles.roleId, role.id)),
+    });
+    if (membership) {
+      res.status(409).json({ error: { code: "ROLE_ALREADY_ASSIGNED", message: "Pengguna sudah memiliki role tersebut pada unit ini." } });
+      return;
+    }
+    await db.transaction(async (tx) => {
+      await tx.insert(userSchoolRoles).values({ userId: user.id, schoolId, roleId: role.id, assignedBy: req.auth!.sub });
+      await tx.insert(auditLogs).values({
+        actorUserId: req.auth!.sub, schoolId, action: "user.role_assigned",
+        entityType: "user", entityId: user.id, metadata: { email: user.email, roleCode: role.code },
+      });
+    });
+    res.status(201).json({ data: { id: user.id, email: user.email, fullName: user.fullName, status: user.status, role: { code: role.code, name: role.name } } });
+  } catch (error) { next(error); }
 });
 
 usersRouter.patch("/:userId", async (req, res, next) => {
