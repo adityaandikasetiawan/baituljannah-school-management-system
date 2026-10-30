@@ -28,7 +28,7 @@ async function seed() {
   if (!defaultTemplate) {
     const [createdTemplate] = await db.insert(siteTemplates).values({
       code: "baituljannah-classic", name: "Baituljannah Classic", schemaVersion: "1.0",
-      definition: { schemaVersion: "1.0", sections: [
+      definition: { schemaVersion: "1.0", theme: { primaryColor: "#166534", surfaceColor: "#f0fdf4", textColor: "#14532d" }, sections: [
         { type: "hero", label: "Hero", description: "Banner utama sekolah" },
         { type: "heading", label: "Judul", description: "Judul bagian halaman" },
         { type: "rich_text", label: "Teks", description: "Informasi dan deskripsi sekolah" },
@@ -38,6 +38,19 @@ async function seed() {
       ] },
     }).returning();
     defaultTemplate = createdTemplate;
+  }
+  if (!(await db.query.siteTemplates.findFirst({ where: eq(siteTemplates.code, "baituljannah-modern") }))) {
+    await db.insert(siteTemplates).values({
+      code: "baituljannah-modern", name: "Baituljannah Modern", schemaVersion: "1.0",
+      definition: { schemaVersion: "1.0", theme: { primaryColor: "#1d4ed8", surfaceColor: "#eff6ff", textColor: "#172554" }, sections: [
+        { type: "hero", label: "Hero", description: "Banner utama sekolah" },
+        { type: "heading", label: "Judul", description: "Judul bagian halaman" },
+        { type: "rich_text", label: "Teks", description: "Informasi dan deskripsi sekolah" },
+        { type: "image", label: "Gambar", description: "Foto kegiatan atau fasilitas" },
+        { type: "notice", label: "Pengumuman", description: "Informasi penting sekolah" },
+        { type: "button", label: "Tombol", description: "Tautan tindakan" },
+      ] },
+    });
   }
   if (defaultTemplate) await db.update(schoolSites).set({ templateId: defaultTemplate.id }).where(isNull(schoolSites.templateId));
 }

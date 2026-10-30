@@ -194,6 +194,7 @@ publicCmsRouter.get("/schools/:schoolCode/pages/:slug", async (req, res, next) =
       siteTitle: schoolSites.title, schoolName: schoolUnits.name, schoolCode: schoolUnits.code,
     }).from(schoolUnits)
       .innerJoin(schoolSites, eq(schoolSites.schoolId, schoolUnits.id))
+      .leftJoin(siteTemplates, eq(siteTemplates.id, schoolSites.templateId))
       .innerJoin(sitePages, and(eq(sitePages.siteId, schoolSites.id), eq(sitePages.slug, slug.data)))
       .innerJoin(sitePublications, eq(sitePublications.pageId, sitePages.id))
       .innerJoin(sitePageVersions, eq(sitePageVersions.id, sitePublications.pageVersionId))
