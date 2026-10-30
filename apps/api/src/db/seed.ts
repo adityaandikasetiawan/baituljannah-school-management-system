@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { db, pool } from "./client.js";
 import { organizations, permissions, roles, rolePermissions, siteTemplates, schoolSites } from "./schema/index.js";
 const permissionCatalog = [["platform.manage","Manage foundation settings and school units"],["school.read","Read school-unit data"],["school.manage","Create and manage school units"],["user.manage","Manage user accounts and assignments"],["student.read","Read student records"],["student.manage","Manage student records"],["academic.manage","Manage academic configuration"],["attendance.manage","Manage attendance"],["assessment.manage","Manage assessments and grades"],["finance.manage","Manage invoices and manual payment verification"],["website.manage","Manage the school website"],["website.publish","Publish school website content"],["audit.read","Read audit logs"]] as const;
@@ -39,6 +39,6 @@ async function seed() {
     }).returning();
     defaultTemplate = createdTemplate;
   }
-  if (defaultTemplate) await db.update(schoolSites).set({ templateId: defaultTemplate.id }).where((table, { isNull }) => isNull(table.templateId));
+  if (defaultTemplate) await db.update(schoolSites).set({ templateId: defaultTemplate.id }).where(isNull(schoolSites.templateId));
 }
 seed().then(() => pool.end()).catch(async (error: unknown) => { console.error(error); await pool.end(); process.exitCode = 1; });
