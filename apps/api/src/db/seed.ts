@@ -6,7 +6,7 @@ const permissionCatalog = [["platform.manage","Manage foundation settings and sc
 const roleCatalog = [["super_admin","Super Admin","global"],["foundation_admin","Foundation Admin","global"],["school_principal","School Principal","school"],["school_admin","School Admin","school"],["teacher","Teacher","school"],["finance","Finance","school"],["content_editor","Content Editor","school"],["parent","Parent","personal"],["student","Student","personal"]] as const;
 const rolePermissionsMap: Record<string, string[]> = {
   school_principal: ["school.read","user.manage","teacher.manage","student.read","student.manage","academic.manage","attendance.manage","assessment.manage","finance.manage","website.manage","website.publish","audit.read"],
-  school_admin: ["school.read","user.manage","student.read","student.manage","academic.manage","attendance.manage","assessment.manage","website.manage","website.publish"],
+  school_admin: ["school.read","user.manage","teacher.manage","student.read","student.manage","academic.manage","attendance.manage","assessment.manage","website.manage","website.publish"],
   teacher: ["school.read","student.read","attendance.manage","assessment.manage"],
   finance: ["school.read","finance.manage"],
   content_editor: ["school.read","website.manage","website.publish"],
