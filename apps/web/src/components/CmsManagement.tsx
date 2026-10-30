@@ -14,6 +14,7 @@ type Block =
 interface Page { id: string; title: string; slug: string; isHome: boolean; isPublished: boolean; updatedAt: string }
 interface SchoolUnit { id: string; code: string; name: string }
 interface Version { id: string; version: string; createdAt: string; document: { schemaVersion: "1.0"; blocks: Block[] } }
+interface SiteDomain { id:string;hostname:string;verifiedAt:string|null;isPrimary:boolean;verificationHost:string;verificationToken:string }
 const blockLabels: Record<Block["type"], string> = { hero: "Banner utama", heading: "Judul bagian", rich_text: "Teks informasi", image: "Gambar", notice: "Pengumuman", button: "Tombol tautan" };
 const newBlock = (type: Block["type"]): Block => {
   const id = `block-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
@@ -31,6 +32,9 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
   const [templates, setTemplates] = useState<{id:string;code:string;name:string}[]>([]);
+  const [domains,setDomains]=useState<SiteDomain[]>([]);
+  const [domainHostname,setDomainHostname]=useState("");
+  const [domainSaving,setDomainSaving]=useState(false);
   const [templateId, setTemplateId] = useState<string>();
   const [templateSaving, setTemplateSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -48,13 +52,14 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
     if (!schoolId) return;
     setLoading(true);
     try {
-      const [siteResponse, templateResponse] = await Promise.all([
-        api.get("/api/v1/cms/site", headers), api.get("/api/v1/cms/templates", headers),
+      const [siteResponse, templateResponse, domainResponse] = await Promise.all([
+        api.get("/api/v1/cms/site", headers), api.get("/api/v1/cms/templates", headers), api.get("/api/v1/cms/domains", headers),
       ]);
       const siteData = siteResponse.data.data as {site:{templateId:string|null};pages:Page[]};
       setPages(siteData.pages);
       setTemplateId(siteData.site.templateId ?? undefined);
       setTemplates(templateResponse.data.data as {id:string;code:string;name:string}[]);
+      setDomains(domainResponse.data.data as SiteDomain[]);
       const nextId = selectedPageId && siteData.pages.some(p=>p.id===selectedPageId) ? selectedPageId : siteData.pages[0]?.id;
       setSelectedPageId(nextId);
     } catch (error: unknown) {
@@ -73,6 +78,39 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
     } catch { message.error("Konten halaman gagal dimuat."); }
   }
   useEffect(()=>{ if(selectedPageId) void loadPage(selectedPageId); else setBlocks([]); },[selectedPageId,schoolId]);
+  async function addDomain() {
+    if(!schoolId || !domainHostname.trim()) return;
+    setDomainSaving(true);
+    try {
+      await api.post("/api/v1/cms/domains",{hostname:domainHostname.trim()},headers);
+      setDomainHostname("");
+      message.success("Domain ditambahkan. Pasang TXT record untuk verifikasi.");
+      await loadSite();
+    } catch(error:unknown) {
+      const response=(error as {response?:{data?:{error?:{message?:string}}}}).response;
+      message.error(response?.data?.error?.message ?? "Domain gagal ditambahkan.");
+    } finally { setDomainSaving(false); }
+  }
+  async function verifyDomain(domainId:string) {
+    try {
+      await api.post(`/api/v1/cms/domains/${domainId}/verify`,{},headers);
+      message.success("Domain berhasil diverifikasi melalui DNS TXT.");
+      await loadSite();
+    } catch(error:unknown) {
+      const response=(error as {response?:{data?:{error?:{message?:string}}}}).response;
+      message.error(response?.data?.error?.message ?? "Verifikasi DNS belum berhasil.");
+    }
+  }
+  async function setPrimaryDomain(domainId:string) {
+    try {
+      await api.patch(`/api/v1/cms/domains/${domainId}/primary`,{},headers);
+      message.success("Domain utama diperbarui.");
+      await loadSite();
+    } catch(error:unknown) {
+      const response=(error as {response?:{data?:{error?:{message?:string}}}}).response;
+      message.error(response?.data?.error?.message ?? "Domain utama gagal diperbarui.");
+    }
+  }
   async function changeTemplate(nextTemplateId:string) {
     if (!schoolId) return;
     setTemplateSaving(true);
@@ -207,6 +245,28 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
         </Card>
       </Space>
     </div>
+    <Card title="Domain Website" extra={<Tag color="blue">{domains.length} domain</Tag>}>
+      <Space wrap style={{width:"100%"}}>
+        <Input style={{minWidth:260,maxWidth:420}} value={domainHostname} onChange={event=>setDomainHostname(event.target.value)} placeholder="contoh: sd.baituljannah.sch.id"/>
+        <Button type="primary" loading={domainSaving} disabled={!domainHostname.trim()} onClick={()=>void addDomain()}>Tambahkan Domain</Button>
+      </Space>
+      <Text type="secondary" style={{display:"block",marginTop:8}}>Tambahkan domain tanpa https://. Sistem akan memberikan TXT record untuk membuktikan kepemilikan domain.</Text>
+      <Divider/>
+      {domains.length===0?<Empty description="Belum ada domain khusus"/>:domains.map(domain=><div key={domain.id} style={{padding:"12px 0",borderBottom:"1px solid #f0f0f0"}}>
+        <Space wrap style={{width:"100%",justifyContent:"space-between"}}>
+          <div><Text strong>{domain.hostname}</Text>{domain.isPrimary&&<Tag color="green" style={{marginLeft:8}}>Utama</Tag>}<div><Tag color={domain.verifiedAt?"success":"warning"}>{domain.verifiedAt?"Terverifikasi":"Menunggu verifikasi"}</Tag></div></div>
+          <Space wrap>
+            {!domain.verifiedAt&&<Button size="small" onClick={()=>void verifyDomain(domain.id)}>Verifikasi DNS</Button>}
+            {domain.verifiedAt&&!domain.isPrimary&&<Button size="small" type="primary" onClick={()=>void setPrimaryDomain(domain.id)}>Jadikan Utama</Button>}
+          </Space>
+        </Space>
+        {!domain.verifiedAt&&<div style={{marginTop:8,background:"#fafafa",padding:10,borderRadius:6}}>
+          <Text type="secondary">TXT Host</Text><div><Text code>{domain.verificationHost}</Text></div>
+          <Text type="secondary">TXT Value</Text><div><Text code>{domain.verificationToken}</Text></div>
+        </div>}
+      </div>)}
+      <Text type="secondary" style={{display:"block",marginTop:12,fontSize:12}}>Verifikasi DNS belum otomatis memasang SSL. Pengaturan DNS tujuan dan sertifikat HTTPS perlu diselesaikan pada infrastruktur hosting.</Text>
+    </Card>
     <Modal title="Buat Halaman Website" open={createOpen} onCancel={()=>setCreateOpen(false)} onOk={()=>createForm.submit()} confirmLoading={creating} okText="Buat Halaman" cancelText="Batal" destroyOnHidden>
       <Form form={createForm} layout="vertical" onFinish={createPage} initialValues={{isHome:false}}>
         <Form.Item name="title" label="Nama Halaman" rules={[{required:true,min:2}]}><Input placeholder="Contoh: Profil Sekolah"/></Form.Item>
