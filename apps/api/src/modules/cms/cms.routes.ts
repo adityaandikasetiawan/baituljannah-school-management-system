@@ -191,7 +191,7 @@ publicCmsRouter.get("/schools/:schoolCode/pages/:slug", async (req, res, next) =
       pageId: sitePages.id, title: sitePages.title, slug: sitePages.slug,
       isHome: sitePages.isHome, version: sitePageVersions.version,
       document: sitePageVersions.document, publishedAt: sitePublications.publishedAt,
-      siteTitle: schoolSites.title, schoolName: schoolUnits.name, schoolCode: schoolUnits.code,
+      siteTitle: schoolSites.title, schoolName: schoolUnits.name, schoolCode: schoolUnits.code, templateDefinition: siteTemplates.definition,
     }).from(schoolUnits)
       .innerJoin(schoolSites, eq(schoolSites.schoolId, schoolUnits.id))
       .leftJoin(siteTemplates, eq(siteTemplates.id, schoolSites.templateId))
