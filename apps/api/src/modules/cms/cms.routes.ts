@@ -1,9 +1,11 @@
 import { Router } from "express";
+import { randomBytes } from "node:crypto";
+import { resolveTxt } from "node:dns/promises";
 import type { Request, Response } from "express";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
-import { auditLogs, schoolSites, schoolUnits, sitePages, sitePageVersions, sitePublications, siteTemplates } from "../../db/schema/index.js";
+import { auditLogs, schoolSites, schoolUnits, sitePages, sitePageVersions, sitePublications, siteTemplates, siteDomains } from "../../db/schema/index.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { loadAccessContext } from "../access/access-context.js";
 import { requirePermission } from "../../middleware/require-permission.js";
@@ -20,6 +22,85 @@ function selectedSchool(req: Request, res: Response): string | null {
 async function findSite(schoolId: string) {
   return db.query.schoolSites.findFirst({ where: eq(schoolSites.schoolId, schoolId) });
 }
+cmsRouter.get("/domains", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {
+  const schoolId = selectedSchool(req, res);
+  if (!schoolId) return;
+  try {
+    const site = await findSite(schoolId);
+    if (!site) { res.status(404).json({ error: { code: "SITE_NOT_FOUND", message: "Website tidak ditemukan." } }); return; }
+    const domains = await db.select({ id: siteDomains.id, hostname: siteDomains.hostname, verifiedAt: siteDomains.verifiedAt, isPrimary: siteDomains.isPrimary, verificationToken: siteDomains.verificationToken })
+      .from(siteDomains).where(eq(siteDomains.siteId, site.id));
+    res.json({ data: domains.map(({ verificationToken, ...domain }) => ({ ...domain, verificationHost: `_baituljannah-verification.${domain.hostname}`, verificationToken })) });
+  } catch (error) { next(error); }
+});
+cmsRouter.post("/domains", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {
+  const schoolId = selectedSchool(req, res);
+  if (!schoolId) return;
+  const parsed = z.object({ hostname: z.string().trim().toLowerCase().max(253).regex(/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/, "Masukkan hostname domain yang valid tanpa protokol atau path.") }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Hostname domain tidak valid.", details: parsed.error.flatten() } }); return; }
+  try {
+    const site = await findSite(schoolId);
+    if (!site) { res.status(404).json({ error: { code: "SITE_NOT_FOUND", message: "Website tidak ditemukan." } }); return; }
+    const token = randomBytes(24).toString("hex");
+    const [domain] = await db.transaction(async (tx) => {
+      const rows = await tx.insert(siteDomains).values({ siteId: site.id, hostname: parsed.data.hostname, verificationToken: token }).returning();
+      await tx.insert(auditLogs).values({ actorUserId: req.auth!.sub, schoolId, action: "cms.domain_added", entityType: "site_domain", entityId: rows[0]?.id, metadata: { hostname: parsed.data.hostname } });
+      return rows;
+    });
+    res.status(201).json({ data: { ...domain, verificationHost: `_baituljannah-verification.${parsed.data.hostname}` } });
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      res.status(409).json({ error: { code: "DOMAIN_ALREADY_EXISTS", message: "Domain sudah terdaftar pada website lain." } });
+      return;
+    }
+    next(error);
+  }
+});
+cmsRouter.post("/domains/:domainId/verify", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {
+  const schoolId = selectedSchool(req, res);
+  if (!schoolId) return;
+  const domainId = z.uuid().safeParse(req.params.domainId);
+  if (!domainId.success) { res.status(400).json({ error: { code: "INVALID_DOMAIN_ID", message: "ID domain tidak valid." } }); return; }
+  try {
+    const site = await findSite(schoolId);
+    if (!site) { res.status(404).json({ error: { code: "SITE_NOT_FOUND", message: "Website tidak ditemukan." } }); return; }
+    const domain = await db.query.siteDomains.findFirst({ where: and(eq(siteDomains.id, domainId.data), eq(siteDomains.siteId, site.id)) });
+    if (!domain) { res.status(404).json({ error: { code: "DOMAIN_NOT_FOUND", message: "Domain tidak ditemukan pada unit ini." } }); return; }
+    const verificationHost = `_baituljannah-verification.${domain.hostname}`;
+    let records: string[] = [];
+    try { records = (await resolveTxt(verificationHost)).map((parts) => parts.join("")); } catch { /* DNS record is not published yet */ }
+    if (!records.includes(domain.verificationToken)) {
+      res.status(422).json({ error: { code: "DNS_NOT_VERIFIED", message: "TXT record belum ditemukan atau nilainya belum sesuai.", verificationHost } });
+      return;
+    }
+    const [updated] = await db.transaction(async (tx) => {
+      const rows = await tx.update(siteDomains).set({ verifiedAt: new Date() }).where(eq(siteDomains.id, domain.id)).returning();
+      await tx.insert(auditLogs).values({ actorUserId: req.auth!.sub, schoolId, action: "cms.domain_verified", entityType: "site_domain", entityId: domain.id, metadata: { hostname: domain.hostname } });
+      return rows;
+    });
+    res.json({ data: updated });
+  } catch (error) { next(error); }
+});
+cmsRouter.patch("/domains/:domainId/primary", authenticate, loadAccessContext, requirePermission("website.manage"), async (req, res, next) => {
+  const schoolId = selectedSchool(req, res);
+  if (!schoolId) return;
+  const domainId = z.uuid().safeParse(req.params.domainId);
+  if (!domainId.success) { res.status(400).json({ error: { code: "INVALID_DOMAIN_ID", message: "ID domain tidak valid." } }); return; }
+  try {
+    const site = await findSite(schoolId);
+    if (!site) { res.status(404).json({ error: { code: "SITE_NOT_FOUND", message: "Website tidak ditemukan." } }); return; }
+    const domain = await db.query.siteDomains.findFirst({ where: and(eq(siteDomains.id, domainId.data), eq(siteDomains.siteId, site.id)) });
+    if (!domain) { res.status(404).json({ error: { code: "DOMAIN_NOT_FOUND", message: "Domain tidak ditemukan pada unit ini." } }); return; }
+    if (!domain.verifiedAt) { res.status(409).json({ error: { code: "DOMAIN_NOT_VERIFIED", message: "Verifikasi DNS domain sebelum menjadikannya domain utama." } }); return; }
+    const [updated] = await db.transaction(async (tx) => {
+      await tx.update(siteDomains).set({ isPrimary: false }).where(eq(siteDomains.siteId, site.id));
+      const rows = await tx.update(siteDomains).set({ isPrimary: true }).where(eq(siteDomains.id, domain.id)).returning();
+      await tx.insert(auditLogs).values({ actorUserId: req.auth!.sub, schoolId, action: "cms.domain_primary_changed", entityType: "site_domain", entityId: domain.id, metadata: { hostname: domain.hostname } });
+      return rows;
+    });
+    res.json({ data: updated });
+  } catch (error) { next(error); }
+});
 cmsRouter.get("/templates", authenticate, loadAccessContext, requirePermission("website.manage"), async (_req, res, next) => {
   try {
     const rows = await db.select({ id: siteTemplates.id, code: siteTemplates.code, name: siteTemplates.name, schemaVersion: siteTemplates.schemaVersion, definition: siteTemplates.definition })

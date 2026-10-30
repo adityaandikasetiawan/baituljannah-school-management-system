@@ -16,6 +16,15 @@ All authoring requests require a bearer token, `x-school-id`, and server-side `w
 
 Supported block types in schema 1.0: hero, heading, rich_text, image, notice, and button. Documents are validated by Zod before storage. Page versions are append-only; publication records point to the exact version made public.
 
+## Custom domains
+
+- `GET /api/v1/cms/domains` — list domains for the selected school.
+- `POST /api/v1/cms/domains` — register a hostname and generate a TXT verification token.
+- `POST /api/v1/cms/domains/:domainId/verify` — verify `_baituljannah-verification.<hostname>` by DNS TXT lookup.
+- `PATCH /api/v1/cms/domains/:domainId/primary` — select a verified primary domain.
+
+DNS verification does not provision TLS certificates or route traffic. Configure the hosting target and SSL certificate (for example through AWS CloudFront and ACM) after verification.
+
 ## Public rendering data
 
 The web application serves a public page renderer at `/site/:schoolCode/:slug` (home defaults to `/beranda`). The renderer displays only API-published documents and derives its navigation from published pages.
