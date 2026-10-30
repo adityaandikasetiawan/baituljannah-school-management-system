@@ -1,15 +1,15 @@
 import { Router } from "express";
-import type { Request, Response } from "express";
+import type { Request, Response as ExpressResponse } from "express";
 import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
-import { academicYears, auditLogs, classGroups, classSubjects, roles, schoolUnits, subjects, userSchoolRoles } from "../../db/schema/index.js";
+import { academicYears, auditLogs, classGroups, classSubjects, subjects, userSchoolRoles } from "../../db/schema/index.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { loadAccessContext } from "../access/access-context.js";
 import { requirePermission } from "../../middleware/require-permission.js";
 
 export const academicRouter = Router();
-function selectedSchool(req:Request,res:Response):string|null {
+function selectedSchool(req:Request,res:ExpressResponse):string|null {
   if(!req.schoolId){res.status(400).json({error:{code:"SCHOOL_CONTEXT_REQUIRED",message:"Pilih school unit melalui header x-school-id."}});return null;}
   return req.schoolId;
 }
