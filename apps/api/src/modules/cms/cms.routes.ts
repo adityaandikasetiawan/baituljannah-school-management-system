@@ -10,15 +10,20 @@ import { requirePermission } from "../../middleware/require-permission.js";
 
 export const cmsRouter = Router();
 const slugSchema = z.string().trim().min(1).max(180).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug must use lowercase letters, numbers, and hyphens");
+const safeExternalUrl = z.string().url().refine((value) => { const protocol = new URL(value).protocol; return protocol === "https:" || protocol === "http:"; }, "Only HTTP and HTTPS URLs are allowed");
+const safeLinkUrl = z.string().trim().min(1).max(500).refine((value) => value.startsWith("/") && !value.startsWith("//") || value.startsWith("#") || safeExternalUrl.safeParse(value).success, "Use a relative path or HTTP/HTTPS URL");
 const blockSchema = z.discriminatedUnion("type", [
-  z.object({ id: z.string().min(1).max(64), type: z.literal("hero"), title: z.string().max(180), subtitle: z.string().max(500).default(""), imageUrl: z.string().url().optional(), buttonLabel: z.string().max(60).optional(), buttonUrl: z.string().max(500).optional() }),
+  z.object({ id: z.string().min(1).max(64), type: z.literal("hero"), title: z.string().max(180), subtitle: z.string().max(500).default(""), imageUrl: safeExternalUrl.optional(), buttonLabel: z.string().max(60).optional(), buttonUrl: safeLinkUrl.optional() }),
   z.object({ id: z.string().min(1).max(64), type: z.literal("heading"), text: z.string().min(1).max(180), level: z.enum(["h2","h3"]).default("h2") }),
   z.object({ id: z.string().min(1).max(64), type: z.literal("rich_text"), text: z.string().max(5000) }),
-  z.object({ id: z.string().min(1).max(64), type: z.literal("image"), url: z.string().url(), alt: z.string().max(250), caption: z.string().max(300).optional() }),
+  z.object({ id: z.string().min(1).max(64), type: z.literal("image"), url: safeExternalUrl, alt: z.string().max(250), caption: z.string().max(300).optional() }),
   z.object({ id: z.string().min(1).max(64), type: z.literal("notice"), title: z.string().max(180), text: z.string().max(1500) }),
-  z.object({ id: z.string().min(1).max(64), type: z.literal("button"), label: z.string().min(1).max(60), url: z.string().max(500) }),
+  z.object({ id: z.string().min(1).max(64), type: z.literal("button"), label: z.string().min(1).max(60), url: safeLinkUrl }),
 ]);
-const documentSchema = z.object({ schemaVersion: z.literal("1.0"), blocks: z.array(blockSchema).max(60) });
+const documentSchema = z.object({ schemaVersion: z.literal("1.0"), blocks: z.array(blockSchema).max(60) }).superRefine((document, context) => {
+  const ids = document.blocks.map((block) => block.id);
+  if (new Set(ids).size !== ids.length) context.addIssue({ code: "custom", message: "Block IDs must be unique within a page.", path: ["blocks"] });
+});
 const createPageSchema = z.object({ title: z.string().trim().min(2).max(180), slug: slugSchema, isHome: z.boolean().default(false) });
 const savePageSchema = z.object({ document: documentSchema });
 function selectedSchool(req: Request, res: Response): string | null {
@@ -98,7 +103,7 @@ cmsRouter.put("/pages/:pageId", authenticate, loadAccessContext, requirePermissi
     const page = await db.query.sitePages.findFirst({ where: and(eq(sitePages.id, pageId.data), eq(sitePages.siteId, site.id)) });
     if (!page) { res.status(404).json({ error: { code: "PAGE_NOT_FOUND", message: "Halaman tidak ditemukan pada unit ini." } }); return; }
     const versions = await db.select().from(sitePageVersions).where(eq(sitePageVersions.pageId, page.id)).orderBy(desc(sitePageVersions.createdAt));
-    const version = `v${versions.length + 1}`;
+    const version = `v${Date.now()}`;
     const [created] = await db.transaction(async (tx) => {
       const rows = await tx.insert(sitePageVersions).values({ pageId: page.id, version, document: parsed.data.document, createdBy: req.auth!.sub }).returning();
       await tx.update(sitePages).set({ updatedAt: new Date() }).where(eq(sitePages.id, page.id));
@@ -155,7 +160,7 @@ cmsRouter.post("/pages/:pageId/rollback/:versionId", authenticate, loadAccessCon
 });
 export const publicCmsRouter = Router();
 publicCmsRouter.get("/schools/:schoolCode/pages/:slug", async (req, res, next) => {
-  const code = z.string().trim().min(2).max(32).safeParse(req.params.schoolCode);
+  const code = z.string().trim().min(2).max(32).transform((value) => value.toUpperCase()).safeParse(req.params.schoolCode);
   const slug = slugSchema.safeParse(req.params.slug);
   if (!code.success || !slug.success) { res.status(400).json({ error: { code: "INVALID_ROUTE", message: "Alamat halaman tidak valid." } }); return; }
   try {
