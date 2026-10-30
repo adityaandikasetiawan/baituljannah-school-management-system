@@ -10,6 +10,14 @@ import { requirePermission } from "../../middleware/require-permission.js";
 export const financeRouter=Router();
 function selectedSchool(req:Request,res:ExpressResponse):string|null{if(!req.schoolId){res.status(400).json({error:{code:"SCHOOL_CONTEXT_REQUIRED",message:"Pilih school unit melalui header x-school-id."}});return null;}return req.schoolId;}
 financeRouter.use(authenticate,loadAccessContext);
+financeRouter.get("/enrollments",requirePermission("finance.manage"),async(req,res,next)=>{
+ const schoolId=selectedSchool(req,res);if(!schoolId)return;
+ try{
+  const rows=await db.select({id:studentEnrollments.id,admissionNumber:studentEnrollments.admissionNumber,studentName:students.fullName,academicYear:studentEnrollments.academicYear,gradeLabel:studentEnrollments.gradeLabel,status:studentEnrollments.status})
+   .from(studentEnrollments).innerJoin(students,eq(students.id,studentEnrollments.studentId)).where(and(eq(studentEnrollments.schoolId,schoolId),eq(studentEnrollments.status,"active"))).orderBy(asc(students.fullName));
+  res.json({data:rows});
+ }catch(error){next(error);}
+});
 financeRouter.get("/invoices",requirePermission("finance.manage"),async(req,res,next)=>{
  const schoolId=selectedSchool(req,res);if(!schoolId)return;
  try{
