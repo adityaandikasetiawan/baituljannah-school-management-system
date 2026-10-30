@@ -161,6 +161,27 @@ cmsRouter.post("/pages/:pageId/rollback/:versionId", authenticate, loadAccessCon
   } catch (error) { next(error); }
 });
 export const publicCmsRouter = Router();
+publicCmsRouter.get("/schools/:schoolCode", async (req, res, next) => {
+  const code = z.string().trim().min(2).max(32).transform((value) => value.toUpperCase()).safeParse(req.params.schoolCode);
+  if (!code.success) { res.status(400).json({ error: { code: "INVALID_SCHOOL_CODE", message: "Kode sekolah tidak valid." } }); return; }
+  try {
+    const [site] = await db.select({
+      siteId: schoolSites.id, siteTitle: schoolSites.title, schoolName: schoolUnits.name, schoolCode: schoolUnits.code,
+    }).from(schoolUnits).innerJoin(schoolSites, eq(schoolSites.schoolId, schoolUnits.id))
+      .where(and(eq(schoolUnits.code, code.data), eq(schoolUnits.status, "active"), eq(schoolSites.status, "published"))).limit(1);
+    if (!site) { res.status(404).json({ error: { code: "PUBLIC_SITE_NOT_FOUND", message: "Website sekolah belum dipublikasikan." } }); return; }
+    const publications = await db.select({
+      pageId: sitePages.id, title: sitePages.title, slug: sitePages.slug, isHome: sitePages.isHome,
+      version: sitePageVersions.version, publishedAt: sitePublications.publishedAt,
+    }).from(sitePages).innerJoin(sitePublications, eq(sitePublications.pageId, sitePages.id))
+      .innerJoin(sitePageVersions, eq(sitePageVersions.id, sitePublications.pageVersionId))
+      .where(eq(sitePages.siteId, site.siteId)).orderBy(desc(sitePublications.publishedAt));
+    const latestByPage = new Map<string, typeof publications[number]>();
+    for (const item of publications) if (!latestByPage.has(item.pageId)) latestByPage.set(item.pageId, item);
+    res.json({ data: { ...site, pages: [...latestByPage.values()].sort((a,b) => Number(b.isHome)-Number(a.isHome) || a.title.localeCompare(b.title)) } });
+  } catch (error) { next(error); }
+});
+
 publicCmsRouter.get("/schools/:schoolCode/pages/:slug", async (req, res, next) => {
   const code = z.string().trim().min(2).max(32).transform((value) => value.toUpperCase()).safeParse(req.params.schoolCode);
   const slug = cmsSlugSchema.safeParse(req.params.slug);
