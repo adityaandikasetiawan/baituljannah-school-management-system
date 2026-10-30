@@ -12,6 +12,7 @@ import { api } from "./lib/api";
 import { APP_VERSION } from "./version";
 import { UserManagement } from "./components/UserManagement";
 import { CmsManagement } from "./components/CmsManagement";
+import { PublicSchoolSite } from "./components/PublicSchoolSite";
 
 const { Header, Sider, Content, Footer } = Layout;
 const { Title, Text } = Typography;
@@ -21,7 +22,7 @@ interface SchoolUnit { id: string; code: string; name: string; level: string; st
 interface LoginInput { email: string; password: string }
 interface CreateSchoolUnitInput { code: string; name: string; level: "TK" | "SD" | "SMP" | "SMA" | "SLB" }
 
-export default function App() {
+function AdminApp() {
   const [collapsed, setCollapsed] = useState(false);
   const [activeMenu, setActiveMenu] = useState("overview");
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -212,4 +213,10 @@ export default function App() {
       </Form>
     </Modal>
   </Layout>;
+}
+
+export default function App() {
+  const publicMatch = window.location.pathname.match(/^\/site\/([A-Za-z0-9_-]+)(?:\/([a-z0-9-]+))?\/?$/);
+  if (publicMatch) return <PublicSchoolSite schoolCode={publicMatch[1] ?? ""} slug={publicMatch[2] ?? "beranda"} />;
+  return <AdminApp />;
 }

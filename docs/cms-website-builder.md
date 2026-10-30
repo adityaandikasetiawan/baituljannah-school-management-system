@@ -18,4 +18,6 @@ Supported block types in schema 1.0: hero, heading, rich_text, image, notice, an
 
 ## Public rendering data
 
+The web application serves a public page renderer at `/site/:schoolCode/:slug` (home defaults to `/beranda`). The renderer displays only API-published documents and derives its navigation from published pages.
+
 `GET /api/v1/public/schools/:schoolCode/pages/:slug` returns only a published page version for an active school and published site. It does not return draft content. Custom-domain verification and host-based routing remain separate deployment tasks.
