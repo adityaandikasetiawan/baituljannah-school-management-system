@@ -1,8 +1,10 @@
-import { pgTable, pgEnum, uuid, varchar, text, boolean, timestamp, jsonb, uniqueIndex, index, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, uuid, varchar, text, boolean, timestamp, jsonb, uniqueIndex, index, primaryKey, date } from "drizzle-orm/pg-core";
 
 export const unitStatus = pgEnum("unit_status", ["active", "inactive", "archived"]);
 export const userStatus = pgEnum("user_status", ["invited", "active", "suspended"]);
 export const siteStatus = pgEnum("site_status", ["draft", "published", "suspended"]);
+export const studentRecordStatus = pgEnum("student_record_status", ["active", "inactive", "archived"]);
+export const enrollmentStatus = pgEnum("enrollment_status", ["candidate", "active", "graduated", "transferred", "withdrawn"]);
 
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -156,3 +158,51 @@ export const siteAssets = pgTable("site_assets", {
   uploadedBy: uuid("uploaded_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+
+// Student master data is organization-scoped; school/year participation is stored in enrollments.
+export const students = pgTable("students", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+  nisn: varchar("nisn", { length: 10 }),
+  fullName: varchar("full_name", { length: 180 }).notNull(),
+  preferredName: varchar("preferred_name", { length: 100 }),
+  gender: varchar("gender", { length: 16 }).notNull(),
+  birthPlace: varchar("birth_place", { length: 120 }),
+  birthDate: date("birth_date", { mode: "string" }),
+  address: text("address"),
+  recordStatus: studentRecordStatus("record_status").default("active").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [uniqueIndex("students_nisn_uq").on(t.nisn), index("students_org_name_idx").on(t.organizationId, t.fullName)]);
+
+export const studentEnrollments = pgTable("student_enrollments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  schoolId: uuid("school_id").notNull().references(() => schoolUnits.id, { onDelete: "cascade" }),
+  admissionNumber: varchar("admission_number", { length: 40 }).notNull(),
+  academicYear: varchar("academic_year", { length: 9 }).notNull(),
+  gradeLabel: varchar("grade_label", { length: 40 }).notNull(),
+  status: enrollmentStatus("status").default("active").notNull(),
+  startDate: date("start_date", { mode: "string" }),
+  endDate: date("end_date", { mode: "string" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  uniqueIndex("student_enrollment_school_admission_uq").on(t.schoolId, t.admissionNumber),
+  uniqueIndex("student_enrollment_school_year_uq").on(t.schoolId, t.studentId, t.academicYear),
+  index("student_enrollment_school_status_idx").on(t.schoolId, t.status),
+]);
+
+export const studentGuardians = pgTable("student_guardians", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").references(() => users.id),
+  fullName: varchar("full_name", { length: 180 }).notNull(),
+  relationship: varchar("relationship", { length: 40 }).notNull(),
+  phone: varchar("phone", { length: 32 }).notNull(),
+  email: varchar("email", { length: 254 }),
+  isPrimary: boolean("is_primary").default(false).notNull(),
+  canPickup: boolean("can_pickup").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [index("student_guardians_student_idx").on(t.studentId)]);
