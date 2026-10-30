@@ -167,7 +167,7 @@ export function CmsManagement({ schoolUnits }: { schoolUnits: SchoolUnit[] }) {
         </Space>}
         <Divider/>
         <Text type="secondary">Template aktif</Text>
-        <Select style={{width:"100%",marginTop:8}} value={templateId} loading={templateSaving} onChange={value=>void changeTemplate(value)} options={templates.map(t=>({value:t.id,label:t.name}))} placeholder="Pilih template"/>
+        <Select style={{width:"100%",marginTop:8}} value={templateId} loading={templateSaving} onChange={value=>{if(value) void changeTemplate(value);}} options={templates.map(t=>({value:t.id,label:t.name}))} placeholder="Pilih template"/>
         <Text type="secondary" style={{display:"block",fontSize:11,marginTop:8}}>Pergantian template tidak menimpa konten halaman yang sudah dibuat.</Text>
       </Card>
       <Space direction="vertical" size="middle" style={{width:"100%"}}>
