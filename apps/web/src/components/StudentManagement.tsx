@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 const { Text } = Typography;
 type SchoolUnit = { id:string; code:string; name:string };
 type Student = { id:string; fullName:string; nisn:string|null; admissionNumber:string; academicYear:string; gradeLabel:string; enrollmentStatus:string; gender:string };
-type StudentForm = { fullName:string; nisn?:string; gender:"male"|"female"; birthDate?:string; admissionNumber:string; academicYear:string; gradeLabel:string };
+type StudentForm = { fullName:string; nisn?:string; gender:"male"|"female"; birthDate?:string; admissionNumber:string; academicYear:string; gradeLabel:string; guardianName?:string; guardianRelationship?:"father"|"mother"|"guardian"|"other"; guardianPhone?:string; guardianEmail?:string };
 export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
   const [schoolId,setSchoolId]=useState<string>();
   const [rows,setRows]=useState<Student[]>([]);
@@ -29,7 +29,7 @@ export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
     if(!schoolId)return;
     setSaving(true);
     try{
-      await api.post("/api/v1/students",{...values,nisn:values.nisn||undefined,birthDate:values.birthDate||undefined,enrollmentStatus:"active",guardians:[]},{headers:{"x-school-id":schoolId}});
+      await api.post("/api/v1/students",{...values,nisn:values.nisn||undefined,birthDate:values.birthDate||undefined,enrollmentStatus:"active",guardians:values.guardianName?[{fullName:values.guardianName,relationship:values.guardianRelationship??"guardian",phone:values.guardianPhone??"",email:values.guardianEmail??"",isPrimary:true,canPickup:true}]:[]},{headers:{"x-school-id":schoolId}});
       message.success("Data siswa berhasil ditambahkan.");
       setOpen(false);form.resetFields();await load();
     }catch(error:unknown){
@@ -44,6 +44,7 @@ export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
     {title:"Tahun Ajaran",dataIndex:"academicYear",key:"academicYear"},
     {title:"Jenis Kelamin",dataIndex:"gender",key:"gender",render:(value:string)=>value==="male"?"Laki-laki":"Perempuan"},
     {title:"Status",dataIndex:"enrollmentStatus",key:"enrollmentStatus",render:(value:string)=><Tag color={value==="active"?"green":"gold"}>{value.toUpperCase()}</Tag>},
+    {title:"Ubah Status",key:"action",render:(_value,row)=><Select size="small" value={row.enrollmentStatus} style={{width:150}} onChange={async next=>{if(!schoolId)return;try{await api.patch(`/api/v1/students/${row.id}/enrollment`,{status:next},{headers:{"x-school-id":schoolId}});message.success("Status siswa diperbarui.");await load();}catch{message.error("Status siswa gagal diperbarui.");}}} options={[{value:"candidate",label:"Calon Siswa"},{value:"active",label:"Aktif"},{value:"graduated",label:"Lulus"},{value:"transferred",label:"Pindah"},{value:"withdrawn",label:"Mengundurkan Diri"}]}/>},
   ];
   return <Space direction="vertical" size="middle" style={{width:"100%"}}>
     <Card><Space wrap style={{width:"100%",justifyContent:"space-between"}}>
@@ -62,6 +63,11 @@ export function StudentManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}) {
         <Form.Item name="admissionNumber" label="Nomor Induk" rules={[{required:true}]}><Input/></Form.Item>
         <Form.Item name="academicYear" label="Tahun Ajaran" rules={[{required:true,pattern:/^\d{4}\/\d{4}$/}]}><Input placeholder="2026/2027"/></Form.Item>
         <Form.Item name="gradeLabel" label="Kelas" rules={[{required:true}]}><Input placeholder="Kelas 1"/></Form.Item>
+        <Typography.Title level={5}>Orang Tua / Wali (Opsional)</Typography.Title>
+        <Form.Item name="guardianName" label="Nama Orang Tua / Wali"><Input/></Form.Item>
+        <Form.Item name="guardianRelationship" label="Hubungan"><Select options={[{value:"father",label:"Ayah"},{value:"mother",label:"Ibu"},{value:"guardian",label:"Wali"},{value:"other",label:"Lainnya"}]}/></Form.Item>
+        <Form.Item name="guardianPhone" label="Nomor Telepon"><Input/></Form.Item>
+        <Form.Item name="guardianEmail" label="Email"><Input/></Form.Item>
       </Form>
     </Modal>
   </Space>;
