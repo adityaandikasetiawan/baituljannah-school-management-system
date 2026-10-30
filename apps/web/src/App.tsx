@@ -10,6 +10,7 @@ import {
 import type { TableColumnsType } from "antd";
 import { api } from "./lib/api";
 import { APP_VERSION } from "./version";
+import { UserManagement } from "./components/UserManagement";
 
 const { Header, Sider, Content, Footer } = Layout;
 const { Title, Text } = Typography;
@@ -137,7 +138,7 @@ export default function App() {
       <Menu theme="dark" mode="inline" selectedKeys={[activeMenu]} onClick={({ key }) => setActiveMenu(key)} items={[
         {key:"overview",icon:<AppstoreOutlined/>,label:"Dashboard"},
         {key:"units",icon:<BankOutlined/>,label:"School Units"},
-        {key:"users",icon:<TeamOutlined/>,label:"Pengguna & Akses",disabled:true},
+        {key:"users",icon:<TeamOutlined/>,label:"Pengguna & Akses"},
         {key:"academic",icon:<BookOutlined/>,label:"Akademik",disabled:true},
         {key:"security",icon:<SafetyCertificateOutlined/>,label:"Audit & Keamanan",disabled:true}
       ]}/>
@@ -170,6 +171,7 @@ export default function App() {
         {activeMenu === "units" && <Card>
           <Table rowKey="id" columns={columns} dataSource={units} loading={unitsLoading} pagination={{ pageSize: 10, showSizeChanger: false }} locale={{ emptyText: "Belum ada school unit. Tambahkan unit pertama untuk memulai." }} scroll={{ x: 640 }} />
         </Card>}
+        {activeMenu === "users" && <UserManagement schoolUnits={units} />}
       </Content>
       <Footer className="app-footer">Baituljannah SMIS · v{APP_VERSION} · API v1</Footer>
     </Layout>
