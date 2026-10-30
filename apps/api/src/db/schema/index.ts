@@ -6,6 +6,8 @@ export const siteStatus = pgEnum("site_status", ["draft", "published", "suspende
 export const studentRecordStatus = pgEnum("student_record_status", ["active", "inactive", "archived"]);
 export const enrollmentStatus = pgEnum("enrollment_status", ["candidate", "active", "graduated", "transferred", "withdrawn"]);
 export const academicYearStatus = pgEnum("academic_year_status", ["draft", "active", "closed"]);
+export const attendanceSessionStatus = pgEnum("attendance_session_status", ["draft", "submitted", "locked"]);
+export const attendanceRecordStatus = pgEnum("attendance_record_status", ["unmarked", "present", "absent", "late", "sick", "permission"]);
 
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -252,3 +254,25 @@ export const studentGuardians = pgTable("student_guardians", {
   canPickup: boolean("can_pickup").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [index("student_guardians_student_idx").on(t.studentId)]);
+
+export const attendanceSessions = pgTable("attendance_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  schoolId: uuid("school_id").notNull().references(() => schoolUnits.id, { onDelete: "cascade" }),
+  classGroupId: uuid("class_group_id").notNull().references(() => classGroups.id, { onDelete: "cascade" }),
+  subjectId: uuid("subject_id").references(() => subjects.id),
+  sessionDate: date("session_date", { mode: "string" }).notNull(),
+  status: attendanceSessionStatus("status").default("draft").notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [uniqueIndex("attendance_session_class_date_subject_uq").on(t.classGroupId, t.sessionDate, t.subjectId), index("attendance_session_school_date_idx").on(t.schoolId, t.sessionDate)]);
+
+export const attendanceRecords = pgTable("attendance_records", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sessionId: uuid("session_id").notNull().references(() => attendanceSessions.id, { onDelete: "cascade" }),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  status: attendanceRecordStatus("status").default("unmarked").notNull(),
+  note: varchar("note", { length: 500 }),
+  markedBy: uuid("marked_by").references(() => users.id),
+  markedAt: timestamp("marked_at", { withTimezone: true }),
+}, (t) => [uniqueIndex("attendance_record_session_student_uq").on(t.sessionId, t.studentId), index("attendance_record_student_idx").on(t.studentId)]);
