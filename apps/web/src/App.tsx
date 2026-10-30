@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  AppstoreOutlined, BankOutlined, BookOutlined, LogoutOutlined, EditOutlined,
+  AppstoreOutlined, BankOutlined, BookOutlined, LogoutOutlined, EditOutlined, GlobalOutlined,
   SafetyCertificateOutlined, TeamOutlined, PlusOutlined
 } from "@ant-design/icons";
 import {
@@ -11,6 +11,7 @@ import type { TableColumnsType } from "antd";
 import { api } from "./lib/api";
 import { APP_VERSION } from "./version";
 import { UserManagement } from "./components/UserManagement";
+import { CmsManagement } from "./components/CmsManagement";
 
 const { Header, Sider, Content, Footer } = Layout;
 const { Title, Text } = Typography;
@@ -154,6 +155,7 @@ export default function App() {
         {key:"overview",icon:<AppstoreOutlined/>,label:"Dashboard"},
         {key:"units",icon:<BankOutlined/>,label:"School Units"},
         {key:"users",icon:<TeamOutlined/>,label:"Pengguna & Akses"},
+        {key:"website",icon:<GlobalOutlined/>,label:"Website Builder"},
         {key:"academic",icon:<BookOutlined/>,label:"Akademik",disabled:true},
         {key:"security",icon:<SafetyCertificateOutlined/>,label:"Audit & Keamanan",disabled:true}
       ]}/>
@@ -183,6 +185,7 @@ export default function App() {
           <div><Text type="secondary">BAITULJANNAH / FOUNDATION</Text><Title level={2}>School Units</Title><Text type="secondary">Kelola unit sekolah yang berada di bawah Yayasan Baituljannah.</Text></div>
           <Button type="primary" icon={<PlusOutlined/>} onClick={() => { setEditingUnit(null); unitForm.resetFields(); setCreateOpen(true); }}>Tambah School Unit</Button>
         </div> : null}
+        {activeMenu === "website" && <div className="page-heading"><div><Text type="secondary">BAITULJANNAH / WEBSITE</Text><Title level={2}>Website Builder</Title><Text type="secondary">Atur halaman, blok konten, pratinjau, dan publikasi website sekolah.</Text></div></div>}
         {activeMenu === "users" && <div className="page-heading">
           <div><Text type="secondary">BAITULJANNAH / FOUNDATION</Text><Title level={2}>Pengguna & Akses</Title><Text type="secondary">Kelola akun dan penempatan peran pengguna pada setiap unit sekolah.</Text></div>
         </div>}
@@ -190,6 +193,7 @@ export default function App() {
           <Table rowKey="id" columns={columns} dataSource={units} loading={unitsLoading} pagination={{ pageSize: 10, showSizeChanger: false }} locale={{ emptyText: "Belum ada school unit. Tambahkan unit pertama untuk memulai." }} scroll={{ x: 640 }} />
         </Card>}
         {activeMenu === "users" && <UserManagement schoolUnits={units} />}
+        {activeMenu === "website" && <CmsManagement schoolUnits={units} />}
       </Content>
       <Footer className="app-footer">Baituljannah SMIS · v{APP_VERSION} · API v1</Footer>
     </Layout>
