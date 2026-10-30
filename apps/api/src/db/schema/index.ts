@@ -5,6 +5,7 @@ export const userStatus = pgEnum("user_status", ["invited", "active", "suspended
 export const siteStatus = pgEnum("site_status", ["draft", "published", "suspended"]);
 export const studentRecordStatus = pgEnum("student_record_status", ["active", "inactive", "archived"]);
 export const enrollmentStatus = pgEnum("enrollment_status", ["candidate", "active", "graduated", "transferred", "withdrawn"]);
+export const academicYearStatus = pgEnum("academic_year_status", ["draft", "active", "closed"]);
 
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -176,10 +177,55 @@ export const students = pgTable("students", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [uniqueIndex("students_nisn_uq").on(t.nisn), index("students_org_name_idx").on(t.organizationId, t.fullName)]);
 
+export const academicYears = pgTable("academic_years", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  schoolId: uuid("school_id").notNull().references(() => schoolUnits.id, { onDelete: "cascade" }),
+  label: varchar("label", { length: 9 }).notNull(),
+  startDate: date("start_date", { mode: "string" }).notNull(),
+  endDate: date("end_date", { mode: "string" }).notNull(),
+  status: academicYearStatus("status").default("draft").notNull(),
+  isCurrent: boolean("is_current").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [uniqueIndex("academic_year_school_label_uq").on(t.schoolId, t.label), index("academic_year_school_current_idx").on(t.schoolId, t.isCurrent)]);
+
+export const classGroups = pgTable("class_groups", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  schoolId: uuid("school_id").notNull().references(() => schoolUnits.id, { onDelete: "cascade" }),
+  academicYearId: uuid("academic_year_id").notNull().references(() => academicYears.id, { onDelete: "cascade" }),
+  code: varchar("code", { length: 32 }).notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  gradeLabel: varchar("grade_label", { length: 40 }).notNull(),
+  homeroomTeacherId: uuid("homeroom_teacher_id").references(() => users.id),
+  capacity: varchar("capacity", { length: 4 }).default("36").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [uniqueIndex("class_group_year_code_uq").on(t.academicYearId, t.code), index("class_group_school_year_idx").on(t.schoolId, t.academicYearId)]);
+
+export const subjects = pgTable("subjects", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  schoolId: uuid("school_id").notNull().references(() => schoolUnits.id, { onDelete: "cascade" }),
+  code: varchar("code", { length: 32 }).notNull(),
+  name: varchar("name", { length: 140 }).notNull(),
+  gradeLevel: varchar("grade_level", { length: 40 }),
+  description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [uniqueIndex("subjects_school_code_uq").on(t.schoolId, t.code)]);
+
+export const classSubjects = pgTable("class_subjects", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  classGroupId: uuid("class_group_id").notNull().references(() => classGroups.id, { onDelete: "cascade" }),
+  subjectId: uuid("subject_id").notNull().references(() => subjects.id, { onDelete: "cascade" }),
+  teacherId: uuid("teacher_id").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [uniqueIndex("class_subject_pair_uq").on(t.classGroupId, t.subjectId)]);
+
 export const studentEnrollments = pgTable("student_enrollments", {
   id: uuid("id").defaultRandom().primaryKey(),
   studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
   schoolId: uuid("school_id").notNull().references(() => schoolUnits.id, { onDelete: "cascade" }),
+  classGroupId: uuid("class_group_id").references(() => classGroups.id),
   admissionNumber: varchar("admission_number", { length: 40 }).notNull(),
   academicYear: varchar("academic_year", { length: 9 }).notNull(),
   gradeLabel: varchar("grade_label", { length: 40 }).notNull(),
