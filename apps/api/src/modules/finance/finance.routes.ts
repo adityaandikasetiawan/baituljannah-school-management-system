@@ -56,37 +56,44 @@ financeRouter.post("/payments",requirePermission("finance.manage"),async(req,res
  const parsed=z.object({invoiceId:z.uuid(),amount:z.number().int().positive().max(1000000000),method:z.enum(["cash","bank_transfer","other"]),referenceNumber:z.string().trim().max(120).optional(),proofUrl:z.string().url().optional()}).safeParse(req.body);
  if(!parsed.success){res.status(400).json({error:{code:"VALIDATION_ERROR",message:"Data pembayaran tidak valid.",details:parsed.error.flatten()}});return;}
  try{
-  const invoice=await db.query.invoices.findFirst({where:and(eq(invoices.id,parsed.data.invoiceId),eq(invoices.schoolId,schoolId))});
-  if(!invoice||invoice.status==="cancelled"){res.status(404).json({error:{code:"INVOICE_NOT_FOUND",message:"Tagihan tidak ditemukan atau sudah dibatalkan."}});return;}
-  const pending=await db.select({amount:payments.amount}).from(payments).where(and(eq(payments.invoiceId,invoice.id),eq(payments.status,"pending")));
-  const reserved=pending.reduce((total,item)=>total+item.amount,0);
-  const remaining=invoice.amountTotal-invoice.amountPaid-reserved;
-  if(parsed.data.amount>remaining){res.status(409).json({error:{code:"PAYMENT_EXCEEDS_REMAINING",message:"Nominal pembayaran melebihi sisa tagihan yang belum dibayar."}});return;}
-  const [created]=await db.transaction(async(tx)=>{
-   const rows=await tx.insert(payments).values({...parsed.data,schoolId,submittedBy:req.auth!.sub,status:"pending"}).returning();
-   await tx.insert(auditLogs).values({actorUserId:req.auth!.sub,schoolId,action:"finance.payment_recorded",entityType:"payment",entityId:rows[0]?.id,metadata:{invoiceId:invoice.id,amount:parsed.data.amount}});
-   return rows;
+  const result=await db.transaction(async(tx)=>{
+   const [invoice]=await tx.select().from(invoices).where(and(eq(invoices.id,parsed.data.invoiceId),eq(invoices.schoolId,schoolId))).for("update");
+   if(!invoice||invoice.status==="cancelled")return {kind:"not_found" as const};
+   const pending=await tx.select({amount:payments.amount}).from(payments).where(and(eq(payments.invoiceId,invoice.id),eq(payments.status,"pending")));
+   const reserved=pending.reduce((total,item)=>total+item.amount,0);
+   if(parsed.data.amount>invoice.amountTotal-invoice.amountPaid-reserved)return {kind:"exceeds" as const};
+   const [created]=await tx.insert(payments).values({...parsed.data,schoolId,submittedBy:req.auth!.sub,status:"pending"}).returning();
+   await tx.insert(auditLogs).values({actorUserId:req.auth!.sub,schoolId,action:"finance.payment_recorded",entityType:"payment",entityId:created?.id,metadata:{invoiceId:invoice.id,amount:parsed.data.amount}});
+   return {kind:"ok" as const,created};
   });
-  res.status(201).json({data:created});
+  if(result.kind==="not_found"){res.status(404).json({error:{code:"INVOICE_NOT_FOUND",message:"Tagihan tidak ditemukan atau sudah dibatalkan."}});return;}
+  if(result.kind==="exceeds"){res.status(409).json({error:{code:"PAYMENT_EXCEEDS_REMAINING",message:"Nominal pembayaran melebihi sisa tagihan yang belum dibayar."}});return;}
+  res.status(201).json({data:result.created});
  }catch(error){next(error);}
 });
 financeRouter.post("/payments/:paymentId/verify",requirePermission("finance.manage"),async(req,res,next)=>{
  const schoolId=selectedSchool(req,res);if(!schoolId)return;
  const id=z.uuid().safeParse(req.params.paymentId);if(!id.success){res.status(400).json({error:{code:"INVALID_PAYMENT_ID",message:"ID pembayaran tidak valid."}});return;}
  try{
-  const payment=await db.query.payments.findFirst({where:and(eq(payments.id,id.data),eq(payments.schoolId,schoolId))});
-  if(!payment){res.status(404).json({error:{code:"PAYMENT_NOT_FOUND",message:"Pembayaran tidak ditemukan."}});return;}
-  if(payment.status!=="pending"){res.status(409).json({error:{code:"PAYMENT_ALREADY_PROCESSED",message:"Pembayaran sudah diproses sebelumnya."}});return;}
-  const invoice=await db.query.invoices.findFirst({where:and(eq(invoices.id,payment.invoiceId),eq(invoices.schoolId,schoolId))});
-  if(!invoice){res.status(404).json({error:{code:"INVOICE_NOT_FOUND",message:"Tagihan tidak ditemukan."}});return;}
-  if(invoice.amountPaid+payment.amount>invoice.amountTotal){res.status(409).json({error:{code:"PAYMENT_EXCEEDS_REMAINING",message:"Verifikasi akan menyebabkan kelebihan pembayaran."}});return;}
-  await db.transaction(async(tx)=>{
-   await tx.update(payments).set({status:"verified",verifiedBy:req.auth!.sub,verifiedAt:new Date()}).where(eq(payments.id,payment.id));
+  const result=await db.transaction(async(tx)=>{
+   const [payment]=await tx.select().from(payments).where(and(eq(payments.id,id.data),eq(payments.schoolId,schoolId))).for("update");
+   if(!payment)return {kind:"payment_not_found" as const};
+   if(payment.status!=="pending")return {kind:"processed" as const};
+   const [invoice]=await tx.select().from(invoices).where(and(eq(invoices.id,payment.invoiceId),eq(invoices.schoolId,schoolId))).for("update");
+   if(!invoice)return {kind:"invoice_not_found" as const};
+   if(invoice.amountPaid+payment.amount>invoice.amountTotal)return {kind:"exceeds" as const};
+   const [updatedPayment]=await tx.update(payments).set({status:"verified",verifiedBy:req.auth!.sub,verifiedAt:new Date()}).where(and(eq(payments.id,payment.id),eq(payments.status,"pending"))).returning();
+   if(!updatedPayment)return {kind:"processed" as const};
    const amountPaid=invoice.amountPaid+payment.amount;
    await tx.update(invoices).set({amountPaid,status:amountPaid>=invoice.amountTotal?"paid":"partially_paid",updatedAt:new Date()}).where(eq(invoices.id,invoice.id));
    await tx.insert(auditLogs).values({actorUserId:req.auth!.sub,schoolId,action:"finance.payment_verified",entityType:"payment",entityId:payment.id,metadata:{invoiceId:invoice.id,amount:payment.amount}});
+   return {kind:"ok" as const,paymentId:payment.id,invoiceId:invoice.id,amountPaid};
   });
-  res.json({data:{paymentId:payment.id,status:"verified",invoiceId:invoice.id,amountPaid:invoice.amountPaid+payment.amount}});
+  if(result.kind==="payment_not_found"){res.status(404).json({error:{code:"PAYMENT_NOT_FOUND",message:"Pembayaran tidak ditemukan."}});return;}
+  if(result.kind==="invoice_not_found"){res.status(404).json({error:{code:"INVOICE_NOT_FOUND",message:"Tagihan tidak ditemukan."}});return;}
+  if(result.kind==="processed"){res.status(409).json({error:{code:"PAYMENT_ALREADY_PROCESSED",message:"Pembayaran sudah diproses sebelumnya."}});return;}
+  if(result.kind==="exceeds"){res.status(409).json({error:{code:"PAYMENT_EXCEEDS_REMAINING",message:"Verifikasi akan menyebabkan kelebihan pembayaran."}});return;}
+  res.json({data:{paymentId:result.paymentId,status:"verified",invoiceId:result.invoiceId,amountPaid:result.amountPaid}});
  }catch(error){next(error);}
 });
 financeRouter.post("/payments/:paymentId/reject",requirePermission("finance.manage"),async(req,res,next)=>{
