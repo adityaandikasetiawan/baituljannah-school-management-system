@@ -3,7 +3,7 @@ import type { Request, Response } from "express";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
-import { auditLogs, roles, schoolUnits, userSchoolRoles, users } from "../../db/schema/index.js";
+import { auditLogs, globalUserRoles, roles, schoolUnits, userSchoolRoles, users } from "../../db/schema/index.js";
 import { hashPassword } from "../../auth/password.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { requirePermission } from "../../middleware/require-permission.js";
@@ -45,6 +45,27 @@ usersRouter.get("/roles", async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+usersRouter.post("/parent-account", async (req,res,next)=>{
+  const schoolId=selectedSchool(req,res);
+  if(!schoolId)return;
+  const parsed=z.object({email:z.string().trim().pipe(z.email()).transform(v=>v.toLowerCase()),fullName:z.string().trim().min(2).max(180),password:z.string().min(12).max(128)}).safeParse(req.body);
+  if(!parsed.success){res.status(400).json({error:{code:"VALIDATION_ERROR",message:"Data akun orang tua tidak valid.",details:parsed.error.flatten()}});return;}
+  try{
+    const parentRole=await db.query.roles.findFirst({where:and(eq(roles.code,"parent"),eq(roles.scope,"personal"))});
+    if(!parentRole){res.status(409).json({error:{code:"PARENT_ROLE_MISSING",message:"Role parent belum tersedia. Jalankan seed database."}});return;}
+    const [created]=await db.transaction(async(tx)=>{
+      const rows=await tx.insert(users).values({email:parsed.data.email,fullName:parsed.data.fullName,passwordHash:await hashPassword(parsed.data.password),status:"active"}).returning({id:users.id,email:users.email,fullName:users.fullName,status:users.status});
+      if(!rows[0])throw new Error("Parent account insert returned no row");
+      await tx.insert(globalUserRoles).values({userId:rows[0].id,roleId:parentRole.id});
+      await tx.insert(auditLogs).values({actorUserId:req.auth!.sub,schoolId,action:"parent.account_created",entityType:"user",entityId:rows[0].id,metadata:{email:rows[0].email}});
+      return rows;
+    });
+    res.status(201).json({data:created});
+  }catch(error){
+    if(typeof error==="object"&&error!==null&&"code"in error&&error.code==="23505"){res.status(409).json({error:{code:"EMAIL_ALREADY_EXISTS",message:"Email sudah digunakan."}});return;}
+    next(error);
+  }
+});
 usersRouter.get("/", async (req, res, next) => {
   const schoolId = selectedSchool(req, res);
   if (!schoolId) return;
