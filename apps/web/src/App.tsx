@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  AppstoreOutlined, BankOutlined, BookOutlined, LogoutOutlined,
+  AppstoreOutlined, BankOutlined, BookOutlined, LogoutOutlined, EditOutlined,
   SafetyCertificateOutlined, TeamOutlined, PlusOutlined
 } from "@ant-design/icons";
 import {
