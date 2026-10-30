@@ -34,6 +34,7 @@ export const studentUpdateSchema = z.object({
   recordStatus: z.enum(["active","inactive","archived"]).optional(),
 }).refine((value) => Object.keys(value).length > 0);
 export const studentEnrollmentUpdateSchema = z.object({
+  classGroupId: z.uuid().nullable().optional(),
   admissionNumber: z.string().trim().min(2).max(40).optional(),
   academicYear: z.string().regex(/^\d{4}\/\d{4}$/).optional(),
   gradeLabel: z.string().trim().min(1).max(40).optional(),

@@ -3,7 +3,7 @@ import type { Request, Response as ExpressResponse } from "express";
 import { and, asc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
-import { auditLogs, schoolUnits, studentEnrollments, studentGuardians, students } from "../../db/schema/index.js";
+import { academicYears, auditLogs, classGroups, schoolUnits, studentEnrollments, studentGuardians, students } from "../../db/schema/index.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { loadAccessContext } from "../access/access-context.js";
 import { requirePermission } from "../../middleware/require-permission.js";
@@ -108,6 +108,12 @@ studentsRouter.patch("/:studentId/enrollment", requirePermission("student.manage
   try {
     const enrollment = await db.query.studentEnrollments.findFirst({ where: and(eq(studentEnrollments.studentId, id.data), eq(studentEnrollments.schoolId, schoolId)) });
     if (!enrollment) { res.status(404).json({ error: { code: "ENROLLMENT_NOT_FOUND", message: "Pendaftaran siswa tidak ditemukan pada unit ini." } }); return; }
+    if (parsed.data.classGroupId) {
+      const classGroup = await db.query.classGroups.findFirst({ where: and(eq(classGroups.id, parsed.data.classGroupId), eq(classGroups.schoolId, schoolId)) });
+      if (!classGroup) { res.status(404).json({ error: { code: "CLASS_NOT_FOUND", message: "Kelas tidak ditemukan pada unit ini." } }); return; }
+      const academicYear = await db.query.academicYears.findFirst({ where: eq(academicYears.id, classGroup.academicYearId) });
+      if (!academicYear || academicYear.label !== enrollment.academicYear) { res.status(409).json({ error: { code: "CLASS_YEAR_MISMATCH", message: "Tahun ajaran kelas tidak sesuai dengan pendaftaran siswa." } }); return; }
+    }
     const [updated] = await db.transaction(async (tx) => {
       const rows = await tx.update(studentEnrollments).set({ ...parsed.data, updatedAt: new Date() }).where(eq(studentEnrollments.id, enrollment.id)).returning();
       await tx.insert(auditLogs).values({ actorUserId: req.auth!.sub, schoolId, action: "student.enrollment_updated", entityType: "student_enrollment", entityId: enrollment.id, metadata: parsed.data });
