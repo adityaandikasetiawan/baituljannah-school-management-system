@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request, Response } from "express";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -22,7 +23,7 @@ const updateUserSchema = z.object({
 
 usersRouter.use(authenticate, loadAccessContext, requirePermission("user.manage"));
 
-function selectedSchool(req: Express.Request, res: Express.Response): string | null {
+function selectedSchool(req: Request, res: Response): string | null {
   if (!req.schoolId) {
     res.status(400).json({ error: { code: "SCHOOL_CONTEXT_REQUIRED", message: "Pilih school unit melalui header x-school-id terlebih dahulu." } });
     return null;
