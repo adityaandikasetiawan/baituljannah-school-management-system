@@ -16,6 +16,7 @@ import { StudentManagement } from "./components/StudentManagement";
 import { AcademicManagement } from "./components/AcademicManagement";
 import { AttendanceManagement } from "./components/AttendanceManagement";
 import { TeacherManagement } from "./components/TeacherManagement";
+import { FinanceManagement } from "./components/FinanceManagement";
 import { PublicSchoolSite } from "./components/PublicSchoolSite";
 
 const { Header, Sider, Content, Footer } = Layout;
@@ -206,6 +207,8 @@ function AdminApp() {
         {activeMenu === "students" && <StudentManagement schoolUnits={units} />}
         {activeMenu === "teachers" && <div className="page-heading"><div><Text type="secondary">BAITULJANNAH / ACADEMIC</Text><Title level={2}>Data Guru</Title><Text type="secondary">Kelola profil kepegawaian guru per unit sekolah.</Text></div></div>}
         {activeMenu === "teachers" && <TeacherManagement schoolUnits={units} />}
+        {activeMenu === "finance" && <div className="page-heading"><div><Text type="secondary">BAITULJANNAH / FINANCE</Text><Title level={2}>Keuangan Sekolah</Title><Text type="secondary">Kelola tagihan dan verifikasi pembayaran manual.</Text></div></div>}
+        {activeMenu === "finance" && <FinanceManagement schoolUnits={units} />}
         {activeMenu === "academic" && <div className="page-heading"><div><Text type="secondary">BAITULJANNAH / ACADEMIC</Text><Title level={2}>Manajemen Akademik</Title><Text type="secondary">Kelola tahun ajaran, kelas, dan mata pelajaran.</Text></div></div>}
         {activeMenu === "academic" && <AcademicManagement schoolUnits={units} />}
         {activeMenu === "attendance" && <div className="page-heading"><div><Text type="secondary">BAITULJANNAH / ACADEMIC</Text><Title level={2}>Absensi Siswa</Title><Text type="secondary">Catat kehadiran siswa berdasarkan kelas dan tanggal.</Text></div></div>}
