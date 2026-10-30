@@ -7,6 +7,7 @@ type SchoolUnit={id:string;code:string;name:string};
 type Year={id:string;label:string;startDate:string;endDate:string;status:string;isCurrent:boolean};
 type ClassRow={id:string;code:string;name:string;gradeLabel:string;capacity:string;academicYearId:string;academicYear:string};
 type Subject={id:string;code:string;name:string;gradeLevel:string|null;isActive:boolean};
+type ClassSubject={id:string;subjectId:string;subjectCode:string;subjectName:string;teacherName:string|null};
 export function AcademicManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}){
   const [schoolId,setSchoolId]=useState<string>();
   const [years,setYears]=useState<Year[]>([]);
@@ -16,10 +17,14 @@ export function AcademicManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}){
   const [yearOpen,setYearOpen]=useState(false);
   const [classOpen,setClassOpen]=useState(false);
   const [subjectOpen,setSubjectOpen]=useState(false);
+  const [assignmentOpen,setAssignmentOpen]=useState(false);
+  const [selectedClass,setSelectedClass]=useState<ClassRow|null>(null);
+  const [classSubjectRows,setClassSubjectRows]=useState<ClassSubject[]>([]);
   const [saving,setSaving]=useState(false);
   const [yearForm]=Form.useForm();
   const [classForm]=Form.useForm();
   const [subjectForm]=Form.useForm();
+  const [assignmentForm]=Form.useForm<{subjectId:string}>();
   useEffect(()=>{if(!schoolId&&schoolUnits.length)setSchoolId(schoolUnits[0]!.id);},[schoolUnits,schoolId]);
   async function load(){
     if(!schoolId)return;
@@ -41,6 +46,19 @@ export function AcademicManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}){
     catch(error:unknown){const response=(error as {response?:{data?:{error?:{message?:string}}}}).response;message.error(response?.data?.error?.message??"Data akademik gagal disimpan.");}
     finally{setSaving(false);}
   }
+  async function openClassSubjects(row:ClassRow){
+    if(!schoolId)return;
+    setSelectedClass(row);setAssignmentOpen(true);
+    try{const response=await api.get(`/api/v1/academic/classes/${row.id}/subjects`,{headers:{"x-school-id":schoolId}});setClassSubjectRows(response.data.data as ClassSubject[]);}
+    catch{setClassSubjectRows([]);message.error("Mata pelajaran kelas gagal dimuat.");}
+  }
+  async function assignSubject(values:{subjectId:string}){
+    if(!schoolId||!selectedClass)return;
+    setSaving(true);
+    try{await api.post(`/api/v1/academic/classes/${selectedClass.id}/subjects`,values,{headers:{"x-school-id":schoolId}});message.success("Mata pelajaran ditambahkan ke kelas.");assignmentForm.resetFields();await openClassSubjects(selectedClass);}
+    catch(error:unknown){const response=(error as {response?:{data?:{error?:{message?:string}}}}).response;message.error(response?.data?.error?.message??"Mata pelajaran gagal ditambahkan.");}
+    finally{setSaving(false);}
+  }
   const yearColumns:TableColumnsType<Year>=[
     {title:"Tahun Ajaran",dataIndex:"label",key:"label",render:(v:string,row)=><Text strong>{v}{row.isCurrent&&<Tag color="green" style={{marginLeft:8}}>Berjalan</Tag>}</Text>},
     {title:"Mulai",dataIndex:"startDate",key:"startDate"},{title:"Selesai",dataIndex:"endDate",key:"endDate"},
@@ -50,6 +68,7 @@ export function AcademicManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}){
     {title:"Kode",dataIndex:"code",key:"code"},{title:"Nama Kelas",dataIndex:"name",key:"name"},
     {title:"Jenjang",dataIndex:"gradeLabel",key:"gradeLabel"},{title:"Tahun Ajaran",dataIndex:"academicYear",key:"academicYear"},
     {title:"Kapasitas",dataIndex:"capacity",key:"capacity"},
+    {title:"Mata Pelajaran",key:"subjects",render:(_v,row)=><Button size="small" onClick={()=>void openClassSubjects(row)}>Kelola</Button>},
   ];
   const subjectColumns:TableColumnsType<Subject>=[
     {title:"Kode",dataIndex:"code",key:"code"},{title:"Mata Pelajaran",dataIndex:"name",key:"name"},
@@ -63,6 +82,13 @@ export function AcademicManagement({schoolUnits}:{schoolUnits:SchoolUnit[]}){
       {key:"classes",label:"Kelas / Rombel",children:<Card loading={loading} title="Kelas / Rombongan Belajar" extra={<Button type="primary" disabled={!years.length} onClick={()=>setClassOpen(true)}>Tambah Kelas</Button>}><Table rowKey="id" columns={classColumns} dataSource={classes} pagination={{pageSize:10}} locale={{emptyText:"Belum ada kelas."}}/></Card>},
       {key:"subjects",label:"Mata Pelajaran",children:<Card loading={loading} title="Mata Pelajaran" extra={<Button type="primary" onClick={()=>setSubjectOpen(true)}>Tambah Mata Pelajaran</Button>}><Table rowKey="id" columns={subjectColumns} dataSource={subjects} pagination={{pageSize:10}} locale={{emptyText:"Belum ada mata pelajaran."}}/></Card>},
     ]}/>
+    <Modal title={`Mata Pelajaran — ${selectedClass?.name??"Kelas"}`} open={assignmentOpen} onCancel={()=>setAssignmentOpen(false)} footer={<Button onClick={()=>setAssignmentOpen(false)}>Tutup</Button>} destroyOnHidden>
+      <Form form={assignmentForm} layout="inline" onFinish={assignSubject}>
+        <Form.Item name="subjectId" rules={[{required:true}]}><Select style={{minWidth:230}} placeholder="Pilih mata pelajaran" options={subjects.map(s=>({value:s.id,label:`${s.code} — ${s.name}`}))}/></Form.Item>
+        <Form.Item><Button type="primary" htmlType="submit" loading={saving} disabled={!subjects.length}>Tambahkan</Button></Form.Item>
+      </Form>
+      <Table rowKey="id" size="small" style={{marginTop:16}} pagination={false} dataSource={classSubjectRows} columns={[{title:"Kode",dataIndex:"subjectCode"},{title:"Mata Pelajaran",dataIndex:"subjectName"},{title:"Guru",dataIndex:"teacherName",render:(v:string|null)=>v||"Belum ditentukan"}]} locale={{emptyText:"Belum ada mata pelajaran pada kelas ini."}}/>
+    </Modal>
     <Modal title="Tambah Tahun Ajaran" open={yearOpen} onCancel={()=>setYearOpen(false)} onOk={()=>yearForm.submit()} confirmLoading={saving} okText="Simpan" cancelText="Batal" destroyOnHidden>
       <Form form={yearForm} layout="vertical" onFinish={v=>void submit("/api/v1/academic/years",v,()=>setYearOpen(false),yearForm)} initialValues={{status:"draft",isCurrent:false}}>
         <Form.Item name="label" label="Tahun Ajaran" rules={[{required:true,pattern:/^\d{4}\/\d{4}$/}]}><Input placeholder="2026/2027"/></Form.Item>
