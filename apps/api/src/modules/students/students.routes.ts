@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request, Response } from "express";
 import { and, asc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client.js";
@@ -9,7 +10,7 @@ import { requirePermission } from "../../middleware/require-permission.js";
 import { studentCreateSchema, studentUpdateSchema, studentEnrollmentUpdateSchema, guardianCreateSchema } from "./students.schemas.js";
 
 export const studentsRouter = Router();
-function selectedSchool(req: Express.Request, res: Express.Response): string | null {
+function selectedSchool(req: Request, res: Response): string | null {
   if (!req.schoolId) { res.status(400).json({ error: { code: "SCHOOL_CONTEXT_REQUIRED", message: "Pilih school unit melalui header x-school-id." } }); return null; }
   return req.schoolId;
 }
