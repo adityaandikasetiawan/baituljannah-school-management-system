@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client.js";
-import { auditLogs, organizations, schoolSites, schoolUnits } from "../../db/schema/index.js";
+import { auditLogs, organizations, schoolSites, schoolUnits, siteTemplates, sitePages, sitePageVersions } from "../../db/schema/index.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { loadAccessContext } from "../access/access-context.js";
 import { requirePermission } from "../../middleware/require-permission.js";
@@ -113,8 +113,16 @@ schoolRouter.post("/", requirePermission("school.manage"), async (req, res, next
     const created = await db.transaction(async (tx) => {
       const [unit] = await tx.insert(schoolUnits).values({ ...parsed.data, organizationId: organization.id }).returning();
       if (!unit) throw new Error("School unit insert returned no row");
-      const [site] = await tx.insert(schoolSites).values({ schoolId: unit.id, title: unit.name, status: "draft" }).returning();
-      await tx.insert(auditLogs).values({ actorUserId: req.auth!.sub, schoolId: unit.id, action: "school_unit.created", entityType: "school_unit", entityId: unit.id, metadata: { code: unit.code, siteId: site?.id } });
+      const template = await tx.query.siteTemplates.findFirst({ where: eq(siteTemplates.code, "baituljannah-classic") });
+      const [site] = await tx.insert(schoolSites).values({ schoolId: unit.id, title: unit.name, status: "draft", templateId: template?.id }).returning();
+      if (!site) throw new Error("School site insert returned no row");
+      const [home] = await tx.insert(sitePages).values({ siteId: site.id, slug: "beranda", title: "Beranda", isHome: true }).returning();
+      if (!home) throw new Error("Home page insert returned no row");
+      await tx.insert(sitePageVersions).values({
+        pageId: home.id, version: "v1", createdBy: req.auth!.sub,
+        document: { schemaVersion: "1.0", blocks: [{ id: "welcome", type: "hero", title: unit.name, subtitle: "Selamat datang di website resmi sekolah kami." }, { id: "about", type: "heading", text: "Tentang Sekolah", level: "h2" }, { id: "about-text", type: "rich_text", text: "Informasi profil sekolah dapat diperbarui melalui Website Builder." }] },
+      });
+      await tx.insert(auditLogs).values({ actorUserId: req.auth!.sub, schoolId: unit.id, action: "school_unit.created", entityType: "school_unit", entityId: unit.id, metadata: { code: unit.code, siteId: site.id, homePageId: home.id } });
       return { unit, site };
     });
     res.status(201).json({ data: created });
