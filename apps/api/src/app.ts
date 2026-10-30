@@ -5,6 +5,7 @@ import { env } from "./config/env.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { schoolRouter } from "./modules/schools/school.routes.js";
+import { metaRouter } from "./modules/meta/meta.routes.js";
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
@@ -12,6 +13,7 @@ export function createApp() {
   app.use(cors({ origin: env.WEB_ORIGIN, credentials: true }));
   app.use(express.json({ limit: "1mb" }));
   app.use("/health", healthRouter);
+  app.use("/api/v1/meta", metaRouter);
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/school-units", schoolRouter);
   app.use((_req, res) => res.status(404).json({ error: { code: "NOT_FOUND", message: "Route not found" } }));
